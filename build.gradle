@@ -1,0 +1,34 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile files('myutils.jar')
+    compile group: 'org.xerial', name: 'sqlite-jdbc', version: '3.7.2'
+    compile group: 'org.jsoup', name: 'jsoup', version: '1.10.3'
+    testImplementation 'junit:junit:4.12'
+}
+
+version = 1.93
+sourceCompatibility = JavaVersion.VERSION_1_8 
+targetCompatibility = JavaVersion.VERSION_1_8
+ 
+mainClassName = 'Main'
+
+task copy(type: Copy) {
+  from(fileTree("$buildDir/install/${distributions.main.baseName}"))
+  into(/D:\Core Files\Emulator\dolphin\Manga\Data\MangaFox_Scraper\app/)
+}
+
+jar {
+  manifest {
+        attributes('Manifest-Version': '1.0',
+                   'Implementation-Version': version,
+                   'Main-Class':"$mainClassName",	
+                   'Class-Path':'.'
+                   )
+    }
+}
