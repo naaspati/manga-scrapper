@@ -15,11 +15,9 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -34,25 +32,27 @@ import java.util.stream.Collectors;
 
 import javax.swing.JOptionPane;
 
+import sam.manga.newsamrock.MangaTools;
+import sam.manga.newsamrock.converter.ConvertChapter;
+import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.FailedPage;
 import sam.manga.scrapper.manga.parts.Manga;
-import sam.manga.scrapper.scrappers.IScrapper;
-import sam.manga.tools.MangaTools;
+import sam.manga.scrapper.scrappers.AbstractScrapper;
 import sam.myutils.internetutils.InternetUtils;
+import sam.myutils.myutils.MyUtils;
 import sam.tsv.Tsv;
 
 // lots of refactoring needed
 public class Downloader {
-    private final StringBuffer generalFailed = new StringBuffer();
-    private final HashSet<Path> chapterFolders = new HashSet<>();
+    private final List<ConvertChapter> chapterFolders = new ArrayList<>();
     private final List<FailedPage> failedPages = Collections.synchronizedList(new LinkedList<>());
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     private final String format;
-    private final IScrapper scrapper;
+    private final AbstractScrapper scrapper;
     
     private final List<Callable<String>> callables = new ArrayList<>();
     
-    public Downloader(Path root, Collection<Integer> mangaIds, Map<Integer, Manga> mangasMap, IScrapper scrapper){
+    public Downloader(Path root, Collection<Integer> mangaIds, Map<Integer, Manga> mangasMap, AbstractScrapper scrapper){
         format = green("(%s/"+mangasMap.values().size()+")  ")+"%d %s  %s";
         this.scrapper = scrapper;
         
@@ -78,7 +78,9 @@ public class Downloader {
             manga.forEach((chap_num, chapter) -> {
                 String name = String.valueOf(chap_num).replaceAll("\\.0+$", "").concat((chapter.title == null || chapter.title.trim().isEmpty() ? "" : " "+chapter.title));
                 Path folder = mangaDir.resolve(MangaTools.formatMangaChapterName(name));
-                chapterFolders.add(folder);
+                
+                ConvertChapter cc = new ConvertChapter(chapter.mangaid, chapter.number, chapter.title, folder, folder);
+                chapterFolders.add(cc);
 
                 erase_down();
                 System.out.print("  "+yellow(folder.getFileName())+"  ");
@@ -88,7 +90,6 @@ public class Downloader {
 
                 if(chapter.isEmpty()){
                     System.out.println("NO Pages scrapped ");
-                    generalFailed.append("PAGES Is NULL for Chapter: ").append(chapter).append("\n\n");
                     return;
                 }
 
@@ -96,17 +97,14 @@ public class Downloader {
                     Files.createDirectories(folder);
                 } catch (IOException e) {
                     System.out.println("\n"+red("Failed to create dir: ")+folder+"\t"+e+"\n");
-                    generalFailed.append("------------------------------------------------------\n");
-                    generalFailed.append(folder).append('\n');
-                    chapter.forEach((order, p) -> generalFailed.append(p.pageUrl).append('\n').append(p.imageUrl).append('\n'));
-                    generalFailed.append("------------------------------------------------------\n\n");
+                    Errors.DOWNLOADER.addError(manga.id, chap_num, e, "Failed to create dir: ", folder);
                     return;
                 }
 
                 System.out.print("("+chapter.getPageCount()+"): ");
                 callables.clear();
 
-                chapter.forEach((order, page) -> {
+                chapter.forEach(page -> {
                     Path target = folder.resolve(String.valueOf(page.order));
                     if(Files.exists(target))
                         System.out.print(page.order+" ");
@@ -184,7 +182,6 @@ public class Downloader {
         public void run() {
                 executorService.shutdownNow();
 
-                Path generalFailedPath = Paths.get("general-failed.txt");
                 Consumer<Path> delete = path -> {
                     try {
                         Files.deleteIfExists(path);
@@ -227,20 +224,15 @@ public class Downloader {
                 else 
                     delete.accept(failedPagesPath);
 
-                if(generalFailed.length() != 0) {
-                    try {
-                        Files.write(generalFailedPath, generalFailed.toString().getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                        System.out.println(green(generalFailedPath + "  created"));
-                    } catch (IOException e) {
-                        System.out.println(red("failed to write: ")+generalFailedPath+"  error:"+e);
-                    }
-                }
-                else 
-                    delete.accept(generalFailedPath);
-
                 System.out.println(FINISHED_BANNER);
-                chapterFolders.forEach(System.out::println);
-                copyToClipBoard(chapterFolders.stream().filter(Objects::nonNull).map(Path::getParent).distinct().map(Path::toString).collect(Collectors.joining("\n")));
+                chapterFolders.forEach(s -> s.getSource());
+                Tsv tsv = ConvertChapter.toTsv(chapterFolders);
+                try {
+                    tsv.save(Paths.get("    "));
+                } catch (IOException e) {
+                    System.out.println(red("failed to save: chapters.tsv")+MyUtils.exceptionToString(e));
+                }
+                copyToClipBoard(chapterFolders.stream().filter(Objects::nonNull).map(ConvertChapter::getSource).map(Path::getParent).distinct().map(Path::toString).collect(Collectors.joining("\n")));
         }
         
     }

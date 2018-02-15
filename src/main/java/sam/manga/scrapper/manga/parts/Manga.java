@@ -3,10 +3,8 @@ import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import sam.tsv.Row;
@@ -40,9 +38,9 @@ public class Manga implements Serializable {
     public Stream<Chapter> chapterStream() {
         return chaptersMap.values().stream();
     }
-    public Chapter getChapter(double number, Supplier<? extends Chapter> orElse) {
-        return Optional.ofNullable(chaptersMap.get(number))
-                .orElseGet(orElse);
+    public Chapter getChapter(double number, Chapter orElse) {
+        Chapter c = chaptersMap.get(number);
+        return c == null ? orElse : c;
     }
     public Manga(int id, Row row) {
         this.id = id; 

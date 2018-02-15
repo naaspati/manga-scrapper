@@ -5,10 +5,13 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
-import java.io.IOException;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import javax.swing.AbstractAction;
 import javax.swing.JFrame;
@@ -24,26 +27,58 @@ import javax.swing.event.ListSelectionListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableModel;
 
-import sam.db.sqlite.SqliteManeger;
-import sam.properties.myconfig.MyConfig;
+import sam.manga.newsamrock.SamrockDB;
+import sam.manga.newsamrock.chapters.Chapter;
+import sam.manga.newsamrock.mangas.MangasMeta;
 import sam.swing.popup.SwingPopupShop;
 import sam.swing.utils.SwingUtils;
 
 public class IdNameView extends JFrame implements KeyListener, ListSelectionListener{
-    private static final long serialVersionUID = -3846017716203129262L;
+    public static void main(String[] args) throws ClassNotFoundException, InstantiationException, IllegalAccessException, SQLException {
+        new IdNameView();
+    }
     
-    private ArrayList<Object[]> data = new ArrayList<>();
-    private Object[][] dataBeingDisplayed;
-    private HashMap<Integer, Integer> map = new HashMap<>();
+    private static final long serialVersionUID = -3846017716203129262L;
+
+    private List<TEMP> allData = new ArrayList<>();
+    private List<Integer> visibleIndices;
+    private final SamrockDB samrock;
+
     private final JLabel chapterLabel;
     private final JTable table;
     private final JTextField searchTF = new JTextField();
+    
+    private class TEMP {
+        final String name;
+        final String lowerCaseName;
+        final int id;
+        Chapter lastChap;
+        public TEMP(String name, int id) {
+            this.name = name;
+            this.id = id;
+            lowerCaseName = name.toLowerCase();
+        }
+    }
 
-    public IdNameView() throws ClassNotFoundException {
+    public IdNameView() throws ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException {
         super("Name list");
+        samrock = new SamrockDB();
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                try {
+                    samrock.close();
+                    System.out.println("close");
+                } catch (Exception e2) {}
+            }
+        });
+
         SwingPopupShop.setPopupsRelativeTo(this);
-        readDb();
-        dataBeingDisplayed = data.toArray(new Object[data.size()][]);
+
+        samrock.selectAllMangasIterate(rs -> allData.add(new TEMP(rs.getString(MangasMeta.MANGA_NAME), rs.getInt(MangasMeta.MANGA_ID))), MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME);
+        System.out.println(allData.size());
+        visibleIndices = IntStream.range(0, allData.size()).boxed().collect(Collectors.toList()); 
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         table = getTable();
@@ -52,7 +87,7 @@ public class IdNameView extends JFrame implements KeyListener, ListSelectionList
         panel.add(chapterLabel, BorderLayout.NORTH);
         panel.add(searchTF, BorderLayout.SOUTH);
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
-        
+
         searchTF.getActionMap().put("copy", new AbstractAction() {
             private static final long serialVersionUID = 1L;
 
@@ -74,7 +109,6 @@ public class IdNameView extends JFrame implements KeyListener, ListSelectionList
         setLocationRelativeTo(null);
         setVisible(true);
     }
-
     private JTable getTable() {
         TableModel model =  new AbstractTableModel() {
             private static final long serialVersionUID = 1L;
@@ -85,20 +119,21 @@ public class IdNameView extends JFrame implements KeyListener, ListSelectionList
             }
 
             @Override
-            public Object getValueAt(int rowIndex, int columnIndex) {
-                return dataBeingDisplayed[rowIndex][columnIndex];
+            public Object getValueAt(int rowIndex, int index) {
+                TEMP t = allData.get(visibleIndices.get(rowIndex)); 
+                return index == 0 ? t.id : t.name;
             }
 
             @Override
             public int getRowCount() {
-                return dataBeingDisplayed.length;
+                return visibleIndices.size();
             }
             @Override
             public int getColumnCount() {
                 return 2;
             }
         };
-        
+
         JTable table = new JTable(model);
         table.doLayout();
         table.setCellSelectionEnabled(true);
@@ -108,27 +143,29 @@ public class IdNameView extends JFrame implements KeyListener, ListSelectionList
         table.setRowHeight(30);
         table.getColumnModel().getColumn(0).setMaxWidth(100);
         table.getSelectionModel().addListSelectionListener(this);
-        
-        return table;
-    }
 
-    private void readDb() {
-        try(SqliteManeger c = new SqliteManeger(MyConfig.SAMROCK_DB, true)) {
-            c.executeQueryAndIterateResultSet("SELECT * FROM LastChap", rs -> {
-                map.put(rs.getInt(1), data.size());
-                data.add(new Object[] {rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(2).toLowerCase()});                
-            });
-        } catch (SQLException | InstantiationException | IllegalAccessException | IOException | ClassNotFoundException e) {
-            System.out.println("failed to open samrock connection: "+MyConfig.SAMROCK_DB);
-            e.printStackTrace();
-            System.exit(0);
-        }
+        return table;
     }
 
     @Override
     public void valueChanged(ListSelectionEvent e) {
-        Object[] s = data.get(map.get(table.getValueAt(table.getSelectedRow(), 0))); 
-        chapterLabel.setText(String.valueOf(s[2]));
+        TEMP t = null;
+        try {
+            t = allData.get(visibleIndices.get(table.getSelectedRow())); 
+        } catch (IndexOutOfBoundsException e2) {
+            chapterLabel.setText("");
+            return;
+        }
+        if(t.lastChap == null) {
+            try {
+                t.lastChap = samrock.getLastChapter(t.id);
+            } catch (SQLException e1) {
+                System.out.println("failed to load lastchap: manga: "+t.id+"  "+t.name);
+                chapterLabel.setText("");
+                return;
+            }
+        }
+        chapterLabel.setText(t.lastChap.getFileName());
     }
 
     @Override
@@ -137,38 +174,40 @@ public class IdNameView extends JFrame implements KeyListener, ListSelectionList
     @Override
     public void keyPressed(KeyEvent e) {}
 
-    
-        @Override
-        public void keyReleased(KeyEvent e) {
-            int rIndex = table.getSelectedRow();
-            if(e.getKeyCode() == KeyEvent.VK_UP) {
-                if(--rIndex >= 0)
-                    table.getSelectionModel().setSelectionInterval(rIndex, rIndex);
-            }
-            else if(e.getKeyCode() == KeyEvent.VK_DOWN) {
-                if(++rIndex <= table.getRowCount() - 1)
-                    table.getSelectionModel().setSelectionInterval(rIndex, rIndex);
+
+    @Override
+    public void keyReleased(KeyEvent e) {
+        int rIndex = table.getSelectedRow();
+        if(e.getKeyCode() == KeyEvent.VK_UP) {
+            if(--rIndex >= 0)
+                table.getSelectionModel().setSelectionInterval(rIndex, rIndex);
+        }
+        else if(e.getKeyCode() == KeyEvent.VK_DOWN) {
+            if(++rIndex <= table.getRowCount() - 1)
+                table.getSelectionModel().setSelectionInterval(rIndex, rIndex);
+        }
+        else {
+            String text = searchTF.getText();
+            if(text == null || text.isEmpty()) {
+                visibleIndices = IntStream.range(0, allData.size()).boxed().collect(Collectors.toList());;
             }
             else {
-                String text = searchTF.getText();
-                if(text == null || text.isEmpty())
-                    dataBeingDisplayed = data.toArray(new Object[data.size()][]);
-                else {
-                    String t2 = text.toLowerCase();
-                    dataBeingDisplayed = data.stream()
-                            .filter(o -> o[3].toString().contains(t2))
-                            .toArray(Object[][]::new);
-                }
-                if(table.getRowCount() > 0) {
-                    table.getSelectionModel().setSelectionInterval(0, 0);
-                    Object[] s = data.get(map.get(table.getValueAt(0, 0))); 
-                    chapterLabel.setText(String.valueOf(s[2]));
-                }
-                else
-                    chapterLabel.setText(null);
+                String t2 = text.toLowerCase();
+                
+                visibleIndices = IntStream.range(0, allData.size())
+                .filter(i -> allData.get(i).lowerCaseName.contains(t2))
+                .boxed()
+                .collect(Collectors.toList());
             }
-            table.revalidate();
-            table.repaint();
+            if(table.getRowCount() > 0) {
+                table.getSelectionModel().clearSelection();
+                table.getSelectionModel().setSelectionInterval(0, 0);
+            }
+            else
+                chapterLabel.setText(null);
         }
+        table.revalidate();
+        table.repaint();
+    }
 
 }

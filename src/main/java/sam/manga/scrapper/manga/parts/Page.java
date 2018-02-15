@@ -6,14 +6,13 @@ public class Page implements Serializable {
 
     public  final int order;
     public final String pageUrl;
-    public final String imageUrl;
+    public String imageUrl;
 
     public Page(int order, String pageUrl, String imageUrl) {
         this.order = order;
         this.pageUrl = pageUrl;
         this.imageUrl = imageUrl;
     }
-
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();

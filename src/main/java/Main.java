@@ -25,6 +25,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -33,32 +34,35 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Properties;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 import java.util.function.DoublePredicate;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.swing.JOptionPane;
 
-import sam.console.ansi.ANSI;
-import sam.db.sqlite.SqliteManeger;
 import sam.manga.downloader.Downloader;
-import sam.manga.scrapper.extras.ErrorKeys;
+import sam.manga.newsamrock.SamrockDB;
+import sam.manga.newsamrock.mangas.MangasMeta;
+import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.IdNameView;
 import sam.manga.scrapper.manga.parts.Chapter;
 import sam.manga.scrapper.manga.parts.Manga;
-import sam.manga.scrapper.scrappers.IScrapper;
-import sam.manga.scrapper.scrappers.MangaFox;
-import sam.manga.tools.MangaTools;
+import sam.manga.scrapper.scrappers.AbstractScrapper;
+import sam.manga.scrapper.scrappers.MangaHere;
 import sam.myutils.fileutils.FilesUtils;
 import sam.myutils.myutils.MyUtils;
+import sam.myutils.stringutils.StringUtils;
 import sam.properties.myconfig.MyConfig;
+import sam.sql.sqlite.SqlConsumer;
+import sam.sql.sqlite.SqliteManeger;
+import sam.swing.utils.SwingUtils;
 import sam.tsv.Row;
 import sam.tsv.Tsv;
 
@@ -70,17 +74,17 @@ import sam.tsv.Tsv;
  * @author Sameer
  *
  */
-public class Main{
-    private static final double VERSION = 1.945;
+public class Main {
+    private static final double VERSION = 1.96;
     private static final Path APP_HOME = Paths.get(System.getenv("APP_HOME"));
 
     private final Path MANGA_FOLDER = Paths.get(MyConfig.MANGA_FOLDER);
     private final Path MISSING_CHAPTERS_PATH = Paths.get(MyConfig.MISSING_CHAPTERS_PATH);
     private final Path NEW_MANGAS_TSV_PATH = Paths.get(MyConfig.NEW_MANGAS_TSV_PATH);
     private final Path UPDATED_MANGAS_TSV_PATH = Paths.get(MyConfig.UPDATED_MANGAS_TSV_PATH);
-    private final IScrapper scrapper;
+    private final AbstractScrapper scrapper;
 
-    public static void main(String[] args) throws ClassNotFoundException, IOException, URISyntaxException {
+    public static void main(String[] args) throws ClassNotFoundException, IOException, URISyntaxException, InstantiationException, IllegalAccessException, SQLException {
 
         if(args.length == 0){
             System.out.println(red("Invalid using of command: zero number of commands\n"));
@@ -141,41 +145,13 @@ public class Main{
             if(argsList.size() < 1)
                 System.out.println(red("invalid count of commands: ")+Arrays.toString(args));
             else{
+                SwingUtils.copyToClipBoard(String.join(" ", args));
                 m = new Main();
                 m.mangaIdChapterNumberScrapper(argsList);
             }
         }
         else if(CMD.DB.test()){
             new IdNameView();
-        }
-        else if(CMD.DB_UPDATE_CHAPTERS.test()) {
-            Properties p = new Properties();
-            p.load(Files.newInputStream(APP_HOME.resolve("config.properties")));
-
-            Path dbPath = Paths.get(p.getProperty("downloader.db.path"));
-
-            if(Files.notExists(dbPath)) {
-                System.out.println(red("mangafox.db not found: ")+dbPath.toAbsolutePath().normalize());
-                System.exit(0);
-            }
-            if(argsList.isEmpty()) {
-                System.out.println(red("no chapter id provided"));
-                System.exit(0);
-            }
-
-            Predicate<String> filter = s -> !s.matches("-?\\d+");
-            Object[] badData = argsList.stream().filter(filter).toArray();
-            if(badData.length != 0)
-                System.out.println(red("bad chapters id(s): ")+Arrays.toString(badData));
-            argsList.removeIf(filter);
-
-            if(argsList.isEmpty()) {
-                System.out.println(red("no chapter id found"));
-                System.exit(0);
-            }
-
-            m = new Main();
-            m.dbUpdateChapters(argsList, dbPath.toAbsolutePath().normalize().toString());
         }
         else{
             System.out.println(red("failed to recognize command: ")+Arrays.toString(args));
@@ -185,15 +161,16 @@ public class Main{
 
     private static void clean() {
         System.out.println("\n");
-        List<Path> paths = Stream.of("general-failed.txt","failed-pages.txt", "errors.txt","working_backup.dat","mangafox.db","failedlist.txt").map(Paths::get).filter(Files::exists).collect(Collectors.toList());
+        File[] paths = new File(".").listFiles(f -> f.isFile() && !f.getName().equals("ms.bat"));
 
         Path downloads = Paths.get("downloaded");
 
-        if(paths.isEmpty() && Files.notExists(downloads)) {
+        if((paths == null || paths.length == 0) && Files.notExists(downloads)) {
             System.out.println(green("nothing to clean"));
             System.exit(0);
         }
-        paths.forEach(p -> System.out.println(yellow(p.getFileName())));
+        for (File p : paths)
+            System.out.println(yellow(p.getName()));
 
         List<Path> files  = new ArrayList<>(), 
                 dirs = new ArrayList<>();
@@ -261,21 +238,47 @@ public class Main{
 
         System.out.println(yellow("\n\n-------------------------\nDELETING\n"));
 
-        delete.accept(paths, false);
+        if(paths != null && paths.length != 0) {
+            for (File f : paths)
+                System.out.println(f+"  "+(f.delete() ? green("success") : red("failed")));
+        }
         delete.accept(files, false);
         delete.accept(dirs, true);
     }
     private void notifyme() {
-        boolean errorOccured = ERRORS.values().stream().anyMatch(l -> !l.isEmpty());
+        boolean errorOccured = Stream.of(Errors.values()).anyMatch(e -> e.getErrors() != null);
 
         try {
             if(errorOccured){
                 System.out.println(red(createUnColoredBanner("ERRORS")));
-                StringBuilder b = new StringBuilder();
-                ERRORS.forEach((s,t) -> b.append(t.isEmpty() ? "" : (red(s)+"\n  "+String.join("\n  ", t)+"\n\n")));
 
-                System.out.println(b);
-                Files.write(Paths.get("errors.txt"), b.toString().getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                StringBuilder sbb = new StringBuilder();
+                Errors.failedMangaIdChapterNumberMap.forEach((mangaid, chapNums) -> {
+                    sbb.append(mangaid).append(' ');
+                    chapNums.stream()
+                    .filter(Objects::nonNull)
+                    .mapToDouble(d -> d)
+                    .forEach(d -> (d == (int)d ? sbb.append((int)d) : sbb.append(d)).append(' '));
+                });
+                sbb.append("\n\n");
+
+                Errors.failedMangaIdChapterNumberMap.keySet()
+                .stream().map(mangasMap::get)
+                .forEach(m -> {
+                    if(m == null)
+                        return;
+                    sbb.append(m.id).append(Errors.separator)
+                    .append(m.name).append(Errors.separator)
+                    .append(m.url).append('\n');
+                });
+
+                sbb.append("\n\n");
+
+                String data = Stream.of(Errors.values())
+                        .filter(e -> e.getErrors() != null)
+                        .reduce(sbb, (sb,error) -> sb.append("\n--------------------------\n").append(error).append('\n').append(error.getErrors()).append('\n'), StringBuilder::append).toString();
+
+                Files.write(Paths.get("errors.txt"), data.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             }
             else
                 Files.deleteIfExists(Paths.get("errors.txt"));
@@ -292,13 +295,10 @@ public class Main{
 
     }
 
-    final Map<ErrorKeys, Collection<String>> ERRORS = new LinkedHashMap<>();
     final Map<Integer, Manga> mangasMap;
 
     @SuppressWarnings("unchecked")
     public Main() throws IOException, ClassNotFoundException {
-        for (ErrorKeys k : ErrorKeys.values()) ERRORS.put(k, new ArrayList<>());
-
         Path p = Paths.get("working_backup.dat");
         Map<Integer, Manga> map = null;
 
@@ -310,7 +310,7 @@ public class Main{
         mangasMap = map == null ? new LinkedHashMap<>() : map;
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> saveWorkingBackup()));
-        scrapper = new MangaFox();
+        scrapper = new MangaHere(); //TODO
     }
 
     private void saveWorkingBackup() {
@@ -327,89 +327,6 @@ public class Main{
             e.printStackTrace();
         }
     }
-
-    private void dbUpdateChapters(List<String> chapterIds, String dbPath) {
-        try(SqliteManeger c = new SqliteManeger(dbPath, true);
-                PreparedStatement insert = c.prepareStatement("UPDATE Pages SET url = ? WHERE id = ?");
-                ) {
-            Map<String, List<String[]>> mangaIdChapDataMap = 
-                    c.executeQueryAndMapResultSet(
-                            chapterIds.stream().collect(Collectors.joining(",", "SELECT id, manga_id, number, title FROM Chapters WHERE id IN(", ")")), 
-                            rs -> MyUtils.array(rs.getString("id"), rs.getString("manga_id"), rs.getString("number"), rs.getString("title")))
-                    .peek(s -> chapterIds.remove(s[0])).collect(Collectors.groupingBy(s -> s[1]));
-
-            if(!chapterIds.isEmpty())
-                System.out.println(red("No Data Found For chapter id(s): ")+chapterIds);
-
-            if(mangaIdChapDataMap.isEmpty() || mangaIdChapDataMap.values().stream().allMatch(List::isEmpty)) {
-                System.out.println(red("no valid chapter id(s) to process"));
-                return;
-            }
-            Map<String, String> mangaIdNameMap = new HashMap<>();
-            c.executeQueryAndIterateResultSet(
-                    mangaIdChapDataMap.keySet().stream().collect(Collectors.joining(",", "SELECT id, name FROM Mangas WHERE id IN(", ")")), 
-                    rs -> mangaIdNameMap.put(rs.getString("id"), rs.getString("name")));
-
-            Map<String, List<String[]>> chapIdPageDataMap = 
-                    c.executeQueryAndMapResultSet(mangaIdChapDataMap.values().stream().flatMap(List::stream).map(s -> s[0]).collect(Collectors.joining(",", "SELECT id, chapter_id, _order, page_url FROM Pages WHERE chapter_id IN(", ")")), 
-                            rs -> MyUtils.array(rs.getString("id"), rs.getString("chapter_id"), rs.getString("_order"), rs.getString("page_url")))
-                    .peek(s -> chapterIds.remove(s[0])).collect(Collectors.groupingBy(s -> s[1]));
-
-            int progress[] = {1}; 
-            String mangaFormat = yellow("(%s/"+mangaIdNameMap.size()+")  ")+cyan("%s  ")+yellow("Queued: ")+"%s%n";
-            String chapFormat = yellow("  (%s/%s) ")+green("%s %s")+yellow(" (%s)")+":";
-            int[] failed = {0};
-
-            System.out.println(ANSI.cyan("\nmanga_ids: ")+mangaIdChapDataMap.keySet());
-            System.out.println(ANSI.cyan("\nchapter_ids: ")+mangaIdChapDataMap.values().stream().flatMap(List::stream).map(s -> s[0]).collect(Collectors.toList()));
-            System.out.println("\n");
-
-            while(true) {
-                mangaIdChapDataMap.forEach((manga_id, chapData) -> {
-                    System.out.printf(mangaFormat, progress[0]++, mangaIdNameMap.get(manga_id), chapData.size());
-                    int p[] = {1};
-                    chapData.removeIf(cd -> {
-                        List<String[]> pageData = chapIdPageDataMap.get(cd[0]);
-                        System.out.printf(chapFormat, p[0]++, chapData.size(), cd[2].replaceFirst("\\.0$", ""), cd[3], pageData.size());
-                        pageData.removeIf(pd -> {
-                            try {
-                                String imgUrl = scrapper.getImageUrl(pd[3]);
-                                insert.setString(1, imgUrl);
-                                insert.setString(2, pd[0]);
-                                insert.addBatch();
-                                System.out.print(" "+pd[2]);
-                                return true;
-                            } catch (Exception e) {
-                                ERRORS.get(ErrorKeys.PAGE).add(pd[3]+"\t"+getError(e));
-                            }    
-                            System.out.print(" "+red(pd[2]));
-                            failed[0]++;
-                            return false;
-                        });
-                        System.out.println();
-                        return pageData.isEmpty();
-                    });
-                });
-
-                mangaIdChapDataMap.values().removeIf(List::isEmpty);
-
-                if(failed[0] == 0)
-                    break;
-                System.out.println(red("\n\nfailed: ")+failed[0]);
-                failed[0] = 0;
-                if(JOptionPane.showConfirmDialog(null, "retry?") != JOptionPane.YES_OPTION)
-                    break;
-            }
-            System.out.println(green("\n\nExecuted: ")+insert.executeBatch().length);
-            c.commit();
-            System.out.println(ANSI.FINISHED_BANNER);
-            MyUtils.beep(5);
-            System.out.println(yellow("db updated: ")+dbPath);
-        } catch (SQLException | InstantiationException | IllegalAccessException | ClassNotFoundException | IOException e) {
-            e.printStackTrace();
-        }
-    }
-
     void processChapters(final String mangaProgress, Manga manga) {
         processChapters(mangaProgress, manga, -1);
     }
@@ -432,7 +349,8 @@ public class Main{
                 try {
                     scrapper.extractPages(chap);
                 } catch (Exception e) {
-                    ERRORS.get(ErrorKeys.CHAPTER).add(chap.url+"\t"+getError(e));
+                    Errors.CHAPTER.addError(manga.id, chap_num, e, chap.url);
+                    Errors.addFailedMangaIdChapterNumber(manga.id, chap_num);
                 }
                 chap.update();
                 erase_down();
@@ -441,18 +359,12 @@ public class Main{
     }
 
     void extractChapters(final Manga manga){
-        int attempt = 10;
         try {
             scrapper.extractChapters(manga);
-        } catch (Exception e) {}
-
-        while(attempt >= 0 && manga.isEmpty()) attempt--;
-
+        } catch (Exception e) {
+            Errors.MANGA.addError(manga.id, null, e, "Chapter extraction failed");
+        }
     }
-    private String getError(Exception e) {
-        return  e + Stream.of(e.getStackTrace()).map(t -> String.valueOf(t.getLineNumber())).collect(Collectors.joining(",", "(", ")"));
-    }
-
     public void tsvExtractor(final int extractSize) {
         Tsv newTsv = null, updatedTsv = null;
         Map<String, TreeMap<Double, String>> missingChapterMap = null;
@@ -488,12 +400,10 @@ public class Main{
             int count = 0;
             final int total = updatedTsv.size();
 
-            Map<Integer, Double> mangaIdLastChapMap = new HashMap<>();
+            Map<Integer, sam.manga.newsamrock.chapters.Chapter> mangaIdLastChapMap = null;
 
-            try(SqliteManeger c = new SqliteManeger(MyConfig.SAMROCK_DB, true)) {
-                c.executeQueryAndIterateResultSet("SELECT * FROM LastChap", rs -> {
-                    mangaIdLastChapMap.put(rs.getInt("manga_id"), Double.parseDouble(MangaTools.extractChapterNumber(rs.getString("last_chap_name"))));
-                });
+            try(SamrockDB samrock = new SamrockDB()) {
+                mangaIdLastChapMap = samrock.getAllLastChapters(); 
             } catch (SQLException | InstantiationException | IllegalAccessException | IOException | ClassNotFoundException e) {
                 System.out.println("failed to open samrock connection: "+MyConfig.SAMROCK_DB);
                 e.printStackTrace();
@@ -511,15 +421,16 @@ public class Main{
                 extractChapters(manga);
 
                 if(manga.isEmpty()){
-                    System.out.println(red("no chapters extracted"));
+                    System.out.println(red("  no chapters extracted"));
+                    Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga_id, manga.name);
                     mangasMap.remove(manga_id);
                     continue;
                 }   
 
                 int ttl = manga.chaptersCount();
-                Double lastChap = mangaIdLastChapMap.get(manga.id);
+                sam.manga.newsamrock.chapters.Chapter lastChap = mangaIdLastChapMap.get(manga.id);
                 manga.removeChapterIf(c -> {
-                    if(lastChap == null || c.number <= lastChap)
+                    if(lastChap == null || c.number <= lastChap.getNumber())
                         return !map.containsKey(c.number);
                     return false;
                 });
@@ -543,7 +454,7 @@ public class Main{
                     System.out.println(b);
 
                     b.insert(0, row);
-                    ERRORS.get(ErrorKeys.CHAPTER).add(b.toString());
+                    Errors.CHAPTER.addError(null, null, null, b);
                 }
 
                 processChapters(count+"/"+total, manga);
@@ -573,7 +484,7 @@ public class Main{
     }
 
     private void createdatabase() {
-        Path db = Paths.get("mangafox.db");
+        Path db = Paths.get(scrapper.getUrlColumnName()+".db");
 
         try {
             Files.deleteIfExists(db);
@@ -655,7 +566,7 @@ public class Main{
                             return;
                         }
 
-                        chapter.forEach((order, page) -> {
+                        chapter.forEach(page -> {
                             try {
                                 addPage.setInt(1, chapterId);
                                 addPage.setInt(2, manga_id);
@@ -716,10 +627,10 @@ public class Main{
         }
 
         int currentId = -1;
-        final Map<Integer, List<String>> idMissingChapMap = new LinkedHashMap<>();
+        final Map<Integer, Set<String>> idMissingChapMap = new LinkedHashMap<>();
 
         if(data.size() == 1)
-            idMissingChapMap.put(currentId = Integer.parseInt(data.get(0)), new ArrayList<>());
+            idMissingChapMap.put(currentId = Integer.parseInt(data.get(0)), new LinkedHashSet<>());
         else {
             for (String s : data) {
                 if(s.indexOf('_') < 0 && 
@@ -731,7 +642,7 @@ public class Main{
                     if(idMissingChapMap.containsKey(currentId))
                         continue;
 
-                    idMissingChapMap.put(currentId, new ArrayList<>());
+                    idMissingChapMap.put(currentId, new LinkedHashSet<>());
                 }
                 else if(currentId > 0)
                     idMissingChapMap.get(currentId).add(s);
@@ -742,31 +653,41 @@ public class Main{
             return;
         }
 
-        try(SqliteManeger c = new SqliteManeger(MyConfig.SAMROCK_DB, true);
-                ) {
-            String ids = idMissingChapMap.keySet().stream()
-                    .map(String::valueOf)
-                    .collect(Collectors.joining(","));
+        try(SamrockDB  db = new SamrockDB()) {
+            Collection<Integer> ids = idMissingChapMap.keySet();
+            Map<Integer, String> mangaurls = db.getUrls(ids, scrapper.getUrlColumnName());
 
-            Map<Integer, String> mangaurls = new HashMap<>();
-            c.executeQueryAndIterateResultSet("SELECT manga_id, mangafox FROM MangaUrls WHERE manga_id IN("+ids+")", 
-                    rs -> mangaurls.put(rs.getInt("manga_id"), rs.getString("mangafox")));
+            if(mangaurls.values().stream().anyMatch(Objects::isNull)) {
+                Tsv t = new Tsv(MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME, "url");
 
+                mangaurls.values().removeIf(Objects::nonNull);//TODO
 
-            Map<Integer, String> lastChap = new HashMap<>();
-            c.executeQueryAndIterateResultSet("SELECT manga_id, last_chap_name FROM LastChap WHERE manga_id IN("+ids+")",
-                    rs -> lastChap.put(rs.getInt("manga_id"), rs.getString("last_chap_name")));
+                db.selectMangasByIdIterate(mangaurls.keySet(), 
+                        rs -> {t.addRow(rs.getString(MangasMeta.MANGA_ID), rs.getString(MangasMeta.MANGA_NAME));}, 
+                        MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME);
 
-            c.executeQueryAndIterateResultSet("SELECT manga_id, dir_name FROM MangaData WHERE manga_id IN("+ids+")", 
-                    rs -> {
-                        Integer id = rs.getInt("manga_id");
-                        String dirName = rs.getString("dir_name");
+                System.out.println(red("\nmissing urls"));
+                System.out.print(String.format(yellow("%-10s%-10s%n"), "manga_id", "manga_name"));
+                t.forEach(r -> System.out.printf("%-10s%-10s%n", r.get(0), r.get(1)));
+                t.save(Paths.get("missing-urls.tsv"));
 
-                        mangasMap.computeIfAbsent(id, _id -> new Manga(_id, dirName, mangaurls.get(_id)));
+                System.out.println("\nmissing-urls.tsv created");
 
-                        if(idMissingChapMap.get(id).isEmpty())
-                            idMissingChapMap.get(id).add(MangaTools.extractChapterNumber(lastChap.get(id)).concat("_"));
-                    });
+                System.exit(0);
+            }
+
+            Map<Integer, sam.manga.newsamrock.chapters.Chapter> lastChap = db.getLastChapters(ids);
+            SqlConsumer<ResultSet> consumer = rs -> {
+                Integer id = rs.getInt(MangasMeta.MANGA_ID);
+                String dirName = rs.getString(MangasMeta.DIR_NAME);
+
+                mangasMap.computeIfAbsent(id, _id -> new Manga(_id, dirName, mangaurls.get(_id)));
+
+                if(idMissingChapMap.get(id).isEmpty())
+                    idMissingChapMap.get(id).add(StringUtils.doubleToString(lastChap.get(id).getNumber()).concat("_"));
+            }; 
+
+            db.selectMangasByIdIterate((Collection<Integer>)idMissingChapMap.keySet(), consumer, MangasMeta.MANGA_ID, MangasMeta.DIR_NAME);
         } catch (SQLException | InstantiationException | IllegalAccessException | ClassNotFoundException e) {
             showErrorDialog("Error with url extracting", e);
             return;
@@ -837,7 +758,7 @@ public class Main{
         notifyme();
     }
 
-    private List<Integer> scrap(Map<Integer, List<String>> idMissingChapMap) {
+    private List<Integer> scrap(Map<Integer, Set<String>> idMissingChapMap) {
         System.out.println("\n\n"+createBanner("scrapping"));
 
         int progress[] = {1};
@@ -872,7 +793,8 @@ public class Main{
             extractChapters(manga);
 
             if(manga.isEmpty()){
-                System.out.println(red("no chapters extracted"));
+                System.out.println(red("  no chapters extracted"));
+                Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga_id, manga.name);
                 failed.add(manga_id);
                 return;
             }   
@@ -894,7 +816,7 @@ public class Main{
                 .filter(Objects::nonNull)
                 .flatMap(Manga::chapterStream)
                 .flatMap(Chapter::pageStream)
-                .filter(p -> p.imageUrl == null)
+                .filter(p -> p == null || p.imageUrl == null)
                 .count();
 
         if(failedPages > 0) {
@@ -936,7 +858,8 @@ public class Main{
             extractChapters(manga);
 
             if(manga.isEmpty()){
-                System.out.println(red("no chapters extracted"));
+                System.out.println(red("  no chapters extracted"));
+                Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga.id, manga.name);
                 return;
             }
 
