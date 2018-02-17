@@ -69,15 +69,13 @@ public class IdNameView extends JFrame implements KeyListener, ListSelectionList
             public void windowClosing(WindowEvent e) {
                 try {
                     samrock.close();
-                    System.out.println("close");
                 } catch (Exception e2) {}
             }
         });
 
         SwingPopupShop.setPopupsRelativeTo(this);
 
-        samrock.selectAllMangasIterate(rs -> allData.add(new TEMP(rs.getString(MangasMeta.MANGA_NAME), rs.getInt(MangasMeta.MANGA_ID))), MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME);
-        System.out.println(allData.size());
+        samrock.manga().selectAll(rs -> allData.add(new TEMP(rs.getString(MangasMeta.MANGA_NAME), rs.getInt(MangasMeta.MANGA_ID))), MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME);
         visibleIndices = IntStream.range(0, allData.size()).boxed().collect(Collectors.toList()); 
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -158,7 +156,7 @@ public class IdNameView extends JFrame implements KeyListener, ListSelectionList
         }
         if(t.lastChap == null) {
             try {
-                t.lastChap = samrock.getLastChapter(t.id);
+                t.lastChap = samrock.chapter().getLastChapter(t.id);
             } catch (SQLException e1) {
                 System.out.println("failed to load lastchap: manga: "+t.id+"  "+t.name);
                 chapterLabel.setText("");

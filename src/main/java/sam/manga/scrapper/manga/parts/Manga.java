@@ -3,10 +3,13 @@ import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import sam.manga.newsamrock.mangas.MangasMeta;
+import sam.manga.scrapper.scrappers.Scrapper;
 import sam.tsv.Row;
 
 public class Manga implements Serializable {
@@ -17,11 +20,21 @@ public class Manga implements Serializable {
     public final String name;
     public final String url;
     public final Map<Double, Chapter> chaptersMap = new LinkedHashMap<>();
+    private transient ChapterFilter filter;
 
     public Manga(int id, String name, String url) {
         this.id = id;
         this.name = name;
         this.url = url;
+    }
+    public void setFilter(ChapterFilter filter) {
+        Objects.requireNonNull(filter);
+        Objects.requireNonNull(filter.getTester());
+        
+        this.filter = filter;
+    }
+    public ChapterFilter getFilter() {
+        return filter;
     }
     public void removeChapterIf(Predicate<? super Chapter> filter) {
         chaptersMap.values().removeIf(filter);
@@ -44,8 +57,8 @@ public class Manga implements Serializable {
     }
     public Manga(int id, Row row) {
         this.id = id; 
-        this.name = row.get("manga_name");
-        this.url = row.get("url");
+        this.name = row.get(MangasMeta.MANGA_NAME);
+        this.url = row.get(Scrapper.getInstance().getUrlColumnName());
     }
 
     public void forEach(BiConsumer<Double, Chapter> consumer) {

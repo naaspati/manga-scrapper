@@ -16,7 +16,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -38,6 +37,7 @@ import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.FailedPage;
 import sam.manga.scrapper.manga.parts.Manga;
 import sam.manga.scrapper.scrappers.AbstractScrapper;
+import sam.manga.scrapper.scrappers.Scrapper;
 import sam.myutils.internetutils.InternetUtils;
 import sam.myutils.myutils.MyUtils;
 import sam.tsv.Tsv;
@@ -48,21 +48,17 @@ public class Downloader {
     private final List<FailedPage> failedPages = Collections.synchronizedList(new LinkedList<>());
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     private final String format;
-    private final AbstractScrapper scrapper;
+    private final AbstractScrapper scrapper = Scrapper.getInstance();
     
     private final List<Callable<String>> callables = new ArrayList<>();
     
-    public Downloader(Path root, Collection<Integer> mangaIds, Map<Integer, Manga> mangasMap, AbstractScrapper scrapper){
+    public Downloader(Path root, Map<Integer, Manga> mangasMap){
         format = green("(%s/"+mangasMap.values().size()+")  ")+"%d %s  %s";
-        this.scrapper = scrapper;
         
         System.out.println("\n\n"+createBanner("downloading")+"\n");
 
         int[] progress = {1};
         mangasMap.forEach((manga_id, manga) -> {
-            if(!mangaIds.contains(manga_id))
-                return;
-
             System.out.printf(format, progress[0]++, manga_id, manga.name, "\n");
 
             if(manga.isEmpty()){
@@ -115,7 +111,7 @@ public class Downloader {
                                 System.out.print(page.order+" ");    
                             } catch (IOException e) {
                                 System.out.print(red(page.order+" "));
-                                failedPages.add(new FailedPage(target, page, chapter, manga));
+                                failedPages.add(new FailedPage(target, page, chapter, manga, e));
                             }
                             return null;
                         });    
@@ -193,10 +189,10 @@ public class Downloader {
                 Path failedPagesPath = Paths.get("failed-pages.tsv");
 
                 if(!failedPages.isEmpty()) {
-                    Tsv tsv = new Tsv("path", "url", "page url");
+                    Tsv tsv = new Tsv("path", "url", "page url", "error");
 
                     for (FailedPage fp : failedPages)
-                        tsv.addRow(fp.target.toString(), fp.page.pageUrl, fp.page.imageUrl);
+                        tsv.addRow(fp.target.toString(), fp.page.pageUrl, fp.page.imageUrl, MyUtils.exceptionToString(fp.error));
 
                     tsv.addRow("");
                     tsv.addRow("");
@@ -225,15 +221,23 @@ public class Downloader {
                     delete.accept(failedPagesPath);
 
                 System.out.println(FINISHED_BANNER);
-                chapterFolders.forEach(s -> s.getSource());
+                Map<Path, List<Path>> grouped = chapterFolders.stream().filter(Objects::nonNull).map(ConvertChapter::getTarget).collect(Collectors.groupingBy(p -> p.subpath(0,p.getNameCount() - 1))); 
+                
+                System.out.println();
+                StringBuilder sb = new StringBuilder();
+                grouped.forEach((s,t) -> {
+                    yellow(sb, s.getFileName()).append('\n');
+                    t.forEach(z -> sb.append("  ").append(z.getFileName()).append('\n'));
+                });
+                
                 Tsv tsv = ConvertChapter.toTsv(chapterFolders);
                 try {
-                    tsv.save(Paths.get("    "));
+                    tsv.save(Paths.get("chapters.tsv"));
+                    System.out.println(green("chapters.tsv created"));
                 } catch (IOException e) {
                     System.out.println(red("failed to save: chapters.tsv")+MyUtils.exceptionToString(e));
                 }
-                copyToClipBoard(chapterFolders.stream().filter(Objects::nonNull).map(ConvertChapter::getSource).map(Path::getParent).distinct().map(Path::toString).collect(Collectors.joining("\n")));
+                copyToClipBoard(grouped.keySet().stream().map(Path::toString).collect(Collectors.joining("\n")));
         }
-        
     }
 }

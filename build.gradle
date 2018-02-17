@@ -6,7 +6,7 @@ repositories {
 }
 
 dependencies {
-     compile files('myutils.jar')
+      compile files('myutils.jar')
     compile group: 'org.xerial', name: 'sqlite-jdbc', version: '3.7.2'
     compile group: 'org.jsoup', name: 'jsoup', version: '1.10.3'
     testImplementation 'junit:junit:4.12'

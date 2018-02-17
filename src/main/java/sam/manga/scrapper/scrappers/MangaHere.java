@@ -66,7 +66,7 @@ public class MangaHere extends AbstractScrapper {
         .getElementsByTag("a")
         .forEach(elm -> {
             String url = elm.absUrl("href");
-
+            
             if(!elm.absUrl("href").startsWith(mangaurl))
                 return;
 
@@ -80,6 +80,8 @@ public class MangaHere extends AbstractScrapper {
 
             String[] splits = url.split("/");
             String numberS = splits[splits.length - 1];
+            if(numberS.charAt(0) == '#')
+                return;
             String volume = splits[splits.length - 2];
             volume = volume.matches("v\\d+") ? volume : "vUnknown"; 
             numberS = numberS.charAt(0) == 'c' ? numberS.substring(1) : numberS;
