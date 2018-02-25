@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 import javax.swing.JOptionPane;
 
-import sam.manga.newsamrock.MangaTools;
+import sam.manga.newsamrock.chapters.ChapterUtils;
 import sam.manga.newsamrock.converter.ConvertChapter;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.FailedPage;
@@ -59,21 +59,20 @@ public class Downloader {
 
         int[] progress = {1};
         mangasMap.forEach((manga_id, manga) -> {
-            System.out.printf(format, progress[0]++, manga_id, manga.name, "\n");
+            System.out.printf(format, progress[0]++, manga_id, manga.mangaName, "\n");
 
             if(manga.isEmpty()){
                 System.out.println(red("no chapters scrapped\n"));
                 return;
             }
 
-            Path mangaDir = root.resolve(manga.name);
+            Path mangaDir = root.resolve(manga.dirName);
 
             int count[] = {1};
             final String progressFormat = yellow("\n\n%d")+ " / "+green(manga.chaptersCount());
 
             manga.forEach((chap_num, chapter) -> {
-                String name = String.valueOf(chap_num).replaceAll("\\.0+$", "").concat((chapter.title == null || chapter.title.trim().isEmpty() ? "" : " "+chapter.title));
-                Path folder = mangaDir.resolve(MangaTools.formatMangaChapterName(name));
+                Path folder = mangaDir.resolve(ChapterUtils.makeChapterFileName(chap_num, chapter.title, manga.mangaName));
                 
                 ConvertChapter cc = new ConvertChapter(chapter.mangaid, chapter.number, chapter.title, folder, folder);
                 chapterFolders.add(cc);
@@ -152,10 +151,10 @@ public class Downloader {
                 callables.add(() -> {
                     try {
                         InternetUtils.download(new URL(firstAttempt ? fp.page.imageUrl : scrapper.getImageUrl(fp.page.pageUrl)), fp.target);
-                        System.out.println(green(fp.manga.name)+" -> "+yellow(fp.chapter.title) +" -> "+ fp.page.order+" ");
+                        System.out.println(green(fp.manga.dirName)+" -> "+yellow(fp.chapter.title) +" -> "+ fp.page.order+" ");
                         failedPages.remove(fp);
                     } catch (IOException|NullPointerException e) {
-                        System.out.print(green(fp.manga.name)+" -> "+yellow(fp.chapter.title) +" -> "+ red(fp.page.order)+" ");
+                        System.out.print(green(fp.manga.dirName)+" -> "+yellow(fp.chapter.title) +" -> "+ red(fp.page.order)+" ");
                     }
                     return null;
                 });

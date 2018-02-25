@@ -30,8 +30,8 @@ import sam.tsv.Tsv;
 public class MangaIdChapterNumberScrapper {
     private final Map<Integer, Manga> backupMangasMap;
 
-    MangaIdChapterNumberScrapper(List<String> data, Map<Integer, Manga> mangasMap) throws URISyntaxException, IOException, InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException{
-        this.backupMangasMap = mangasMap;
+    MangaIdChapterNumberScrapper(List<String> data, Map<Integer, Manga> backupMangasMap) throws URISyntaxException, IOException, InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException{
+        this.backupMangasMap = backupMangasMap;
 
         if(data.isEmpty()){
             System.out.println(red("no data input"));
@@ -47,18 +47,18 @@ public class MangaIdChapterNumberScrapper {
         List<Integer> failed = new ArrayList<>();
 
         mangaIdChapFltrMap.forEach((id, missings) -> {
-            Manga m = mangasMap.get(id);
+            Manga m = backupMangasMap.get(id);
 
             if(m == null){
                 System.out.println(red("no manga data with id: "+id)); 
                 return;
             }
-            if(m.name == null || m.url == null){
+            if(m.dirName == null || m.url == null){
                 System.out.println(red(m));
                 failed.add(id);
             }
             else
-                System.out.println(yellow(id + ", "+m.name)+"\n   missings: "+missings);
+                System.out.println(yellow(id + ", "+m.dirName)+"\n   missings: "+missings);
         });
         Path p1 = Main.APP_HOME.resolve("-mc.log");
         Path p2 = Main.APP_HOME.resolve("last-mc");
@@ -98,7 +98,7 @@ public class MangaIdChapterNumberScrapper {
             }
         }
         Scrapper.getInstance().scrap(mangaMap);
-        new Downloader(Paths.get(MyConfig.MANGA_FOLDER), mangasMap);
+        new Downloader(Paths.get(MyConfig.MANGA_FOLDER), mangaMap);
     }
 
     private Map<Integer, Manga> prepareMangaMap(Map<Integer, ChapterFilter> srcMangaIdChapFltrMap) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
@@ -148,10 +148,10 @@ public class MangaIdChapterNumberScrapper {
             if(!missingMangas.isEmpty()) {
                 db.manga().select(missingMangas, rs -> {
                     int id = rs.getInt(MangasMeta.MANGA_ID);
-                    Manga manga = new Manga(id, rs.getString(MangasMeta.DIR_NAME), mangaurls.get(id));
+                    Manga manga = new Manga(rs, mangaurls.get(id));
                     mangasMap.put(manga.id, manga);
                     backupMangasMap.put(manga.id, manga);
-                }, MangasMeta.MANGA_ID, MangasMeta.DIR_NAME);                
+                }, MangasMeta.MANGA_ID, MangasMeta.DIR_NAME, MangasMeta.MANGA_NAME);                
             }
              srcMangaIdChapFltrMap.putAll(Scrapper.getInstance().getMissingsFilters(missingChapterMangas, db));
         }

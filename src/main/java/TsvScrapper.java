@@ -75,14 +75,14 @@ public class TsvScrapper {
                 System.out.printf(mangaFormat, ++count, total, row.get("manga_name"));
 
                 final Integer manga_id = Integer.parseInt(row.get("manga_id"));
-                Manga manga = mangasMap.putIfAbsent(manga_id, new Manga(manga_id, row));
+                Manga manga = mangasMap.putIfAbsent(manga_id, new Manga(row));
                 manga = manga != null ? manga : mangasMap.get(manga_id);
 
                 scrapper.extractChapters(manga);
 
                 if(manga.isEmpty()){
                     System.out.println(red("  no chapters extracted"));
-                    Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga_id, manga.name);
+                    Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga_id, manga.mangaName);
                     mangasMap.remove(manga_id);
                     continue;
                 }   
@@ -108,8 +108,8 @@ public class TsvScrapper {
             for (Row row : newTsv) {
                 System.out.printf(mangaFormat, ++count, total, row.get("manga_name"));
 
-                final Integer manga_id = Integer.parseInt(row.get("manga_id"));
-                Manga manga = mangasMap.putIfAbsent(manga_id, new Manga(manga_id, row));
+                final Integer manga_id = row.getInt("manga_id");
+                Manga manga = mangasMap.putIfAbsent(manga_id, new Manga(row));
                 manga = manga != null ? manga : mangasMap.get(manga_id);
 
                 scrapper.extractChapters(manga);
@@ -161,7 +161,8 @@ public class TsvScrapper {
 
             String mangasSql = "CREATE TABLE  `Mangas` ("+
                     "   `id`    INTEGER NOT NULL PRIMARY KEY UNIQUE,"+
-                    "   `name`  TEXT NOT NULL UNIQUE,"+
+                    "   `dir_name`  TEXT NOT NULL UNIQUE,"+
+                    "   `manga_name`  TEXT NOT NULL UNIQUE,"+
                     "   `url`   TEXT NOT NULL UNIQUE,"+
                     "   `status`    TEXT NOT NULL DEFAULT 'UNTOUCHED'"+
                     ");";
@@ -176,13 +177,14 @@ public class TsvScrapper {
 
             try(PreparedStatement addPage = c.prepareStatement(ADD_PAGE_SQL);
                     PreparedStatement addChapter = c.prepareStatement(ADD_CHAPTER_SQL);
-                    PreparedStatement addManga = c.prepareStatement("INSERT INTO Mangas(id, name, url) VALUES(?,?,?)");) {
+                    PreparedStatement addManga = c.prepareStatement("INSERT INTO Mangas(id, dir_name,manga_name, url) VALUES(?,?,?)");) {
 
                 mangasMap.forEach((manga_id, manga) -> {
                     try {
                         addManga.setInt(1, manga_id);
-                        addManga.setString(2, manga.name);
-                        addManga.setString(3, manga.url);
+                        addManga.setString(2, manga.dirName);
+                        addManga.setString(3, manga.mangaName);
+                        addManga.setString(4, manga.url);
                         addManga.addBatch();
                     } catch (SQLException e) {
                         System.out.println(red("failed to add manga to db: ")+manga);

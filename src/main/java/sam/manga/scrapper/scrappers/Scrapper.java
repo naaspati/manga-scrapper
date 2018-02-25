@@ -10,7 +10,6 @@ import static sam.console.vt100.VT100.unsave_cursor;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,7 +59,7 @@ public class Scrapper extends AbstractScrapper {
 
         mangasMap.forEach((manga_id, manga) -> {
             final String url = manga.url;
-            final String dir = manga.name;
+            final String dir = manga.dirName;
 
             System.out.printf(format, progress[0]++, manga_id, dir == null ? red("null") : dir, url == null ? red("null") : url);
 
@@ -72,7 +71,7 @@ public class Scrapper extends AbstractScrapper {
             
             if(manga.isEmpty()){
                 System.out.println(red("  no chapters extracted"));
-                Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga_id, manga.name);
+                Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga_id, manga.dirName);
                 failed.add(manga_id);
                 return;
             }   

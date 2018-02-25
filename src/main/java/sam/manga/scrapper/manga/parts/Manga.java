@@ -1,5 +1,7 @@
 package sam.manga.scrapper.manga.parts;
 import java.io.Serializable;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,7 +10,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import sam.manga.newsamrock.mangas.MangasMeta;
+import static sam.manga.newsamrock.mangas.MangasMeta.*;
 import sam.manga.scrapper.scrappers.Scrapper;
 import sam.tsv.Row;
 
@@ -17,14 +19,22 @@ public class Manga implements Serializable {
     private static final long serialVersionUID = -4611704559346175933L;
 
     public final int id;
-    public final String name;
+    public final String dirName;
+    public final String mangaName;
     public final String url;
     public final Map<Double, Chapter> chaptersMap = new LinkedHashMap<>();
     private transient ChapterFilter filter;
 
-    public Manga(int id, String name, String url) {
+    public Manga(int id, String dirName, String mangaName, String url) {
         this.id = id;
-        this.name = name;
+        this.dirName = dirName;
+        this.mangaName = mangaName;
+        this.url = url;
+    }
+    public Manga(ResultSet rs, String url) throws SQLException {
+        this.id = getMangaId(rs);
+        this.mangaName = getMangaName(rs);
+        this.dirName = getDirName(rs);
         this.url = url;
     }
     public void setFilter(ChapterFilter filter) {
@@ -55,9 +65,10 @@ public class Manga implements Serializable {
         Chapter c = chaptersMap.get(number);
         return c == null ? orElse : c;
     }
-    public Manga(int id, Row row) {
-        this.id = id; 
-        this.name = row.get(MangasMeta.MANGA_NAME);
+    public Manga(Row row) {
+        this.id = row.getInt(MANGA_ID); 
+        this.dirName = row.get(DIR_NAME);
+        this.mangaName = row.get(MANGA_NAME);
         this.url = row.get(Scrapper.getInstance().getUrlColumnName());
     }
 
@@ -66,7 +77,8 @@ public class Manga implements Serializable {
     }
     @Override
     public String toString() {
-        return new StringBuilder().append("Manga [id=").append(id).append(", name=").append(name).append(", url=").append(url)
-                .append("]").toString();
+        return "Manga [id=" + id + ", dirName=" + dirName + ", mangaName=" + mangaName + ", url=" + url
+                + ", chaptersMap=" + chaptersMap + "]";
     }
+    
 }

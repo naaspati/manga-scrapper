@@ -41,7 +41,7 @@ public class UrlScraper {
 
         temp.forEach((url,rangeList) -> {
             String name = url.charAt(url.length() - 1) == '/' ? url.substring(url.lastIndexOf('/', url.length() - 2) + 1, url.length() - 1) : url.substring(url.lastIndexOf('/') + 1, url.length());
-            Manga manga = new Manga(name.hashCode(), name, url);
+            Manga manga = new Manga(name.hashCode(), name, name, url);
             mangasMap.put(manga.id, manga);
             mangaIds.add(manga.id);
 
@@ -51,7 +51,7 @@ public class UrlScraper {
 
             if(manga.isEmpty()){
                 System.out.println(red("  no chapters extracted"));
-                Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga.id, manga.name);
+                Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga.id, manga.dirName);
                 return;
             }
 

@@ -32,6 +32,7 @@ import java.util.stream.Stream;
 
 import javax.swing.JOptionPane;
 
+import javafx.application.Application;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.IdNameView;
 import sam.manga.scrapper.manga.parts.Manga;
@@ -117,9 +118,8 @@ public class Main {
                 new MangaIdChapterNumberScrapper(argsList, m.mangasMap);
             }
         }
-        else if(CMD.DB.test()){
-            new IdNameView();
-        }
+        else if(CMD.DB.test())
+            Application.launch(IdNameView.class, args);
         else{
             System.out.println(red("failed to recognize command: ")+Arrays.toString(args));
             CMD.showHelp();
@@ -238,7 +238,7 @@ public class Main {
                     if(m == null)
                         return;
                     sbb.append(m.id).append(Errors.separator)
-                    .append(m.name).append(Errors.separator)
+                    .append(m.dirName).append(Errors.separator)
                     .append(m.url).append('\n');
                 });
 
