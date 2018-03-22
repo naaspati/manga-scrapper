@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 import sam.manga.downloader.Downloader;
 import sam.manga.newsamrock.SamrockDB;
@@ -133,7 +134,7 @@ public class MangaIdChapterNumberScrapper {
                 mangaurls.values().removeIf(Objects::nonNull);
 
                 db.manga().select(mangaurls.keySet(), 
-                        rs -> t.addRow(rs.getString(MangasMeta.MANGA_ID), rs.getString(MangasMeta.MANGA_NAME)), 
+                        rs -> t.rows().add(rs.getString(MangasMeta.MANGA_ID), rs.getString(MangasMeta.MANGA_NAME)), 
                         MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME);
 
                 System.out.println(red("\nmissing urls"));
@@ -162,25 +163,20 @@ public class MangaIdChapterNumberScrapper {
 
     private Map<Integer, ChapterFilter> parseData(List<String> data) {
         Map<Integer, ChapterFilter> map = new LinkedHashMap<>();
-        int currentId = -1;
+        ChapterFilter current = null;
+        Function<Integer, ChapterFilter> computer = i -> new ChapterFilter();
 
         if(data.size() == 1)
-            map.put(currentId = Integer.parseInt(data.get(0)), new ChapterFilter());
+            map.put(Integer.parseInt(data.get(0)), new ChapterFilter());
         else {
             for (String s : data) {
                 if(s.indexOf('_') < 0 && 
                         s.indexOf('-') < 0 && 
                         s.indexOf('.') < 0 && 
                         s.length() > 3){
-                    currentId = Integer.parseInt(s);
-
-                    if(map.containsKey(currentId))
-                        continue;
-
-                    map.put(currentId, new ChapterFilter());
-                }
-                else if(currentId > 0)
-                    map.get(currentId).add(s);
+                     current = map.computeIfAbsent(Integer.parseInt(s), computer);
+                } else if(current != null)
+                    current.add(s);
             }
         }
         return map;

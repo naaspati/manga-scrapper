@@ -30,8 +30,11 @@ import sam.manga.scrapper.manga.parts.ChapterFilter;
 import sam.manga.scrapper.manga.parts.Manga;
 
 public class Scrapper extends AbstractScrapper {
-    private final AbstractScrapper scrapper = new MangaHere();
-    private static transient Scrapper instance;
+    private static volatile Scrapper instance;
+    
+    public static String[] availableScrappers(){
+        return new String[] { MangaFox.class.getSimpleName(), MangaHere.class.getSimpleName() };
+    }
 
     public static Scrapper getInstance() {
         if (instance == null) {
@@ -42,10 +45,26 @@ public class Scrapper extends AbstractScrapper {
         }
         return instance;
     }
-
-    private Scrapper() {
+    
+    public Class<? extends AbstractScrapper> getCurrentScrapperClass() {
+        return scrapper.getClass();
     }
-
+    private final AbstractScrapper scrapper;
+    
+    private Scrapper() {
+        String name = System.getProperty("scrapper"); 
+        if(name == null)
+            name = System.getenv("scrapper");
+        if(name == null)
+            throw new IllegalStateException("no scrapper property nor scrapper environment variable specied");
+        
+        if(name.equalsIgnoreCase(MangaHere.class.getSimpleName()))
+            scrapper = new MangaHere();
+        else if(name.equalsIgnoreCase(MangaFox.class.getSimpleName()))
+            scrapper = new MangaFox();
+        else
+            throw new IllegalArgumentException("scrapper with name: "+name+"  not found");
+    }
     public List<Integer> scrap(Map<Integer, Manga> mangasMap) {
         System.out.println("\n\n"+createBanner("scrapping"));
 
@@ -163,7 +182,6 @@ public class Scrapper extends AbstractScrapper {
     protected int _extractPages(Chapter chapter) throws Exception {
         throw new IllegalAccessError("_extractPages(Chapter chapter)");
     }
-
     public Map<Integer, ChapterFilter> getMissingsFilters(List<Integer> mangaIds, SamrockDB db) throws SQLException {
         Map<Integer, DoubleStream.Builder> map = new HashMap<>();
         db.chapter().selectByMangaId(mangaIds, 

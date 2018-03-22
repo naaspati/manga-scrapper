@@ -15,7 +15,7 @@ import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.manga.parts.Chapter;
 import sam.manga.scrapper.manga.parts.Manga;
 
-public class MangaHere extends AbstractScrapper {
+class MangaHere extends AbstractScrapper {
     @Override
     public String getImageUrl(Document doc) throws Exception {
         Element urlE = doc.getElementById("image");

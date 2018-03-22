@@ -38,13 +38,15 @@ import sam.manga.scrapper.extras.FailedPage;
 import sam.manga.scrapper.manga.parts.Manga;
 import sam.manga.scrapper.scrappers.AbstractScrapper;
 import sam.manga.scrapper.scrappers.Scrapper;
+import sam.myutils.fileutils.FilesUtils;
 import sam.myutils.internetutils.InternetUtils;
 import sam.myutils.myutils.MyUtils;
+import sam.string.stringutils.StringUtils;
 import sam.tsv.Tsv;
 
 // lots of refactoring needed
 public class Downloader {
-    private final List<ConvertChapter> chapterFolders = new ArrayList<>();
+    private final List<ConvertChapter> chapters = new ArrayList<>();
     private final List<FailedPage> failedPages = Collections.synchronizedList(new LinkedList<>());
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     private final String format;
@@ -75,7 +77,7 @@ public class Downloader {
                 Path folder = mangaDir.resolve(ChapterUtils.makeChapterFileName(chap_num, chapter.title, manga.mangaName));
                 
                 ConvertChapter cc = new ConvertChapter(chapter.mangaid, chapter.number, chapter.title, folder, folder);
-                chapterFolders.add(cc);
+                chapters.add(cc);
 
                 erase_down();
                 System.out.print("  "+yellow(folder.getFileName())+"  ");
@@ -191,10 +193,10 @@ public class Downloader {
                     Tsv tsv = new Tsv("path", "url", "page url", "error");
 
                     for (FailedPage fp : failedPages)
-                        tsv.addRow(fp.target.toString(), fp.page.pageUrl, fp.page.imageUrl, MyUtils.exceptionToString(fp.error));
+                        tsv.rows().add(fp.target.toString(), fp.page.pageUrl, fp.page.imageUrl, MyUtils.exceptionToString(fp.error));
 
-                    tsv.addRow("");
-                    tsv.addRow("");
+                    tsv.rows().add("");
+                    tsv.rows().add("");
                     
                     StringBuilder sbb = new StringBuilder();
 
@@ -202,11 +204,11 @@ public class Downloader {
                     .collect(Collectors.groupingBy(fp -> fp.manga.id, TreeMap::new,  Collectors.mapping(fp -> fp.chapter.number, Collectors.toCollection(TreeSet::new))))
                     .forEach((manga_id, chaps_nums) -> {
                         sbb.append(manga_id).append(' ');
-                        chaps_nums.forEach(c -> sbb.append(c).append(' '));
+                        chaps_nums.forEach(c -> sbb.append(StringUtils.doubleToString(c)).append(' '));
                         sbb.append(' ');
                     });
                     
-                    tsv.addRow(sbb.toString());
+                    tsv.rows().add(sbb.toString());
                     
                     try {
                         tsv.save(failedPagesPath);
@@ -220,7 +222,7 @@ public class Downloader {
                     delete.accept(failedPagesPath);
 
                 System.out.println(FINISHED_BANNER);
-                Map<Path, List<Path>> grouped = chapterFolders.stream().filter(Objects::nonNull).map(ConvertChapter::getTarget).collect(Collectors.groupingBy(p -> p.subpath(0,p.getNameCount() - 1))); 
+                Map<Path, List<Path>> grouped = chapters.stream().filter(Objects::nonNull).map(ConvertChapter::getTarget).collect(Collectors.groupingBy(p -> p.subpath(0,p.getNameCount() - 1))); 
                 
                 System.out.println();
                 StringBuilder sb = new StringBuilder();
@@ -229,9 +231,15 @@ public class Downloader {
                     t.forEach(z -> sb.append("  ").append(z.getFileName()).append('\n'));
                 });
                 
-                Tsv tsv = ConvertChapter.toTsv(chapterFolders);
+                Tsv tsv = ConvertChapter.toTsv(chapters);
                 try {
-                    tsv.save(Paths.get("chapters.tsv"));
+                    Path path = Paths.get("chapters.tsv");
+                   if(Files.exists(path)) {
+                       Path p = FilesUtils.findPathNotExists(path);
+                       Files.move(path, p);
+                       System.out.println(path+"  moved to -> "+p);
+                   } 
+                    tsv.save(path);
                     System.out.println(green("chapters.tsv created"));
                 } catch (IOException e) {
                     System.out.println(red("failed to save: chapters.tsv")+MyUtils.exceptionToString(e));

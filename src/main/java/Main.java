@@ -36,6 +36,8 @@ import javafx.application.Application;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.IdNameView;
 import sam.manga.scrapper.manga.parts.Manga;
+import sam.manga.scrapper.scrappers.AbstractScrapper;
+import sam.manga.scrapper.scrappers.Scrapper;
 import sam.myutils.fileutils.FilesUtils;
 import sam.myutils.myutils.MyUtils;
 import sam.swing.utils.SwingUtils;
@@ -73,6 +75,16 @@ public class Main {
         }
         if(CMD.VERSION.test()){
             System.out.println(yellow("version: "+VERSION+"\n\n"));
+            return;
+        }
+        if(CMD.SCRAPPERS.test()){
+            System.out.println(yellow("available scrappers: \n  ")+String.join("\n  ", Scrapper.availableScrappers()));
+            
+            if(args.length > 1 && args[1].equalsIgnoreCase("-c")) {
+                Class<? extends AbstractScrapper> s = Scrapper.getInstance().getCurrentScrapperClass();
+                System.out.println(yellow("\nscrapper in use: ")+s.getSimpleName()+"   ( "+s.getName()+" )");
+            }
+                
             return;
         }
 

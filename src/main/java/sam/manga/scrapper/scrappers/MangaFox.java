@@ -13,7 +13,7 @@ import sam.manga.newsamrock.urls.MangaUrlsMeta;
 import sam.manga.scrapper.manga.parts.Chapter;
 import sam.manga.scrapper.manga.parts.Manga;
 
-public class MangaFox extends AbstractScrapper {
+class MangaFox extends AbstractScrapper {
     public String getImageUrl(Document doc) throws Exception {
         Element urlE = doc.getElementById("image");
 
