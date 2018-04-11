@@ -1,4 +1,4 @@
-import static sam.console.ansi.ANSI.yellow;
+import static sam.console.ANSI.yellow;
 
 import java.util.Formatter;
 

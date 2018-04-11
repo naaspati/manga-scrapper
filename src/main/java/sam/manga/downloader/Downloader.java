@@ -1,14 +1,14 @@
 package sam.manga.downloader;
 
-import static sam.console.ansi.ANSI.FINISHED_BANNER;
-import static sam.console.ansi.ANSI.createBanner;
-import static sam.console.ansi.ANSI.green;
-import static sam.console.ansi.ANSI.red;
-import static sam.console.ansi.ANSI.yellow;
-import static sam.console.vt100.VT100.erase_down;
-import static sam.console.vt100.VT100.save_cursor;
-import static sam.console.vt100.VT100.unsave_cursor;
-import static sam.swing.utils.SwingUtils.copyToClipBoard;
+import static sam.console.ANSI.FINISHED_BANNER;
+import static sam.console.ANSI.createBanner;
+import static sam.console.ANSI.green;
+import static sam.console.ANSI.red;
+import static sam.console.ANSI.yellow;
+import static sam.console.VT100.erase_down;
+import static sam.console.VT100.save_cursor;
+import static sam.console.VT100.unsave_cursor;
+import static sam.swing.SwingUtils.copyToClipBoard;
 
 import java.io.IOException;
 import java.net.URL;
@@ -31,17 +31,17 @@ import java.util.stream.Collectors;
 
 import javax.swing.JOptionPane;
 
+import mangafoxscrapper.scrapper.Scrapper2;
+import sam.fileutils.FilesUtils;
+import sam.internetutils.InternetUtils;
 import sam.manga.newsamrock.chapters.ChapterUtils;
 import sam.manga.newsamrock.converter.ConvertChapter;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.FailedPage;
-import sam.manga.scrapper.manga.parts.Manga;
+import sam.manga.scrapper.manga.parts.Manga2;
 import sam.manga.scrapper.scrappers.AbstractScrapper;
-import sam.manga.scrapper.scrappers.Scrapper;
-import sam.myutils.fileutils.FilesUtils;
-import sam.myutils.internetutils.InternetUtils;
-import sam.myutils.myutils.MyUtils;
-import sam.string.stringutils.StringUtils;
+import sam.myutils.MyUtils;
+import sam.string.StringUtils;
 import sam.tsv.Tsv;
 
 // lots of refactoring needed
@@ -50,11 +50,11 @@ public class Downloader {
     private final List<FailedPage> failedPages = Collections.synchronizedList(new LinkedList<>());
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     private final String format;
-    private final AbstractScrapper scrapper = Scrapper.getInstance();
+    private final AbstractScrapper scrapper = Scrapper2.getInstance();
     
     private final List<Callable<String>> callables = new ArrayList<>();
     
-    public Downloader(Path root, Map<Integer, Manga> mangasMap){
+    public Downloader(Path root, Map<Integer, Manga2> mangasMap){
         format = green("(%s/"+mangasMap.values().size()+")  ")+"%d %s  %s";
         
         System.out.println("\n\n"+createBanner("downloading")+"\n");

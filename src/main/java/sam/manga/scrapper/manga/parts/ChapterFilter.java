@@ -4,6 +4,10 @@ import java.util.Arrays;
 import java.util.function.DoublePredicate;
 import java.util.stream.DoubleStream;
 
+import sam.console.ANSI;
+import sam.manga.scrapper.extras.Utils;
+import sam.string.StringUtils;
+
 public class ChapterFilter {
     private DoublePredicate tester;
     private StringBuilder sb = new StringBuilder("[");
@@ -11,7 +15,13 @@ public class ChapterFilter {
     public ChapterFilter(DoubleStream.Builder bld) {
         double[] array = bld.build().sorted().toArray();
         tester = d -> Arrays.binarySearch(array, d) < 0;
-        sb.append("missings");
+        if(Utils.isPrintFilter()) {
+            sb.append("NOT IN -> ");
+            String separator = ANSI.yellow(", ");
+            for (double d : array) 
+                sb.append(StringUtils.doubleToString(d)).append(separator);
+        } else 
+            sb.append("MISSINGS");
     }
     public ChapterFilter() { }
     public ChapterFilter(String s) {
@@ -32,6 +42,7 @@ public class ChapterFilter {
     public boolean hasTester() {
         return tester != null;
     }
+    
     private DoublePredicate make(String s) {
         final int index1 = s.indexOf('-');
         final int index2 = s.indexOf('_');

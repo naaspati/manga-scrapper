@@ -1,5 +1,5 @@
-import static sam.console.ansi.ANSI.red;
-import static sam.console.ansi.ANSI.yellow;
+import static sam.console.ANSI.red;
+import static sam.console.ANSI.yellow;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,14 +11,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.DoublePredicate;
 
+import mangafoxscrapper.scrapper.Scrapper2;
 import sam.manga.downloader.Downloader;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.manga.parts.ChapterFilter;
-import sam.manga.scrapper.manga.parts.Manga;
-import sam.manga.scrapper.scrappers.Scrapper;
+import sam.manga.scrapper.manga.parts.Manga2;
 
 public class UrlScraper {
-    public UrlScraper(List<String> args, Map<Integer, Manga> mangasMap) {
+    public UrlScraper(List<String> args, Map<Integer, Manga2> mangasMap) {
         System.out.println("\n");
 
         HashMap<String, List<String>> temp = new HashMap<>();
@@ -37,11 +37,11 @@ public class UrlScraper {
         int[] progress = {1};
 
         List<Integer> mangaIds = new ArrayList<>();
-        Scrapper scrapper = Scrapper.getInstance();
+        Scrapper2 scrapper = Scrapper2.getInstance();
 
         temp.forEach((url,rangeList) -> {
             String name = url.charAt(url.length() - 1) == '/' ? url.substring(url.lastIndexOf('/', url.length() - 2) + 1, url.length() - 1) : url.substring(url.lastIndexOf('/') + 1, url.length());
-            Manga manga = new Manga(name.hashCode(), name, name, url);
+            Manga2 manga = new Manga2(name.hashCode(), name, name, url);
             mangasMap.put(manga.id, manga);
             mangaIds.add(manga.id);
 

@@ -1,10 +1,11 @@
-import static sam.console.ansi.ANSI.ANSI_CLOSE;
-import static sam.console.ansi.ANSI.FINISHED_BANNER;
-import static sam.console.ansi.ANSI.createUnColoredBanner;
-import static sam.console.ansi.ANSI.green;
-import static sam.console.ansi.ANSI.red;
-import static sam.console.ansi.ANSI.yellow;
-import static sam.swing.utils.SwingUtils.showErrorDialog;
+
+import static sam.console.ANSI.ANSI_CLOSE;
+import static sam.console.ANSI.FINISHED_BANNER;
+import static sam.console.ANSI.createUnColoredBanner;
+import static sam.console.ANSI.green;
+import static sam.console.ANSI.red;
+import static sam.console.ANSI.yellow;
+import static sam.swing.SwingUtils.showErrorDialog;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,14 +34,15 @@ import java.util.stream.Stream;
 import javax.swing.JOptionPane;
 
 import javafx.application.Application;
+import mangafoxscrapper.scrapper.Scrapper2;
+import sam.fileutils.FilesUtils;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.IdNameView;
-import sam.manga.scrapper.manga.parts.Manga;
+import sam.manga.scrapper.extras.Utils;
+import sam.manga.scrapper.manga.parts.Manga2;
 import sam.manga.scrapper.scrappers.AbstractScrapper;
-import sam.manga.scrapper.scrappers.Scrapper;
-import sam.myutils.fileutils.FilesUtils;
-import sam.myutils.myutils.MyUtils;
-import sam.swing.utils.SwingUtils;
+import sam.myutils.MyUtils;
+import sam.swing.SwingUtils;
 
 /**
  * 
@@ -53,7 +55,7 @@ import sam.swing.utils.SwingUtils;
 public class Main {
     private static final double VERSION = 1.97;
     public static final Path APP_HOME = Paths.get(System.getenv("APP_HOME"));
-    final Map<Integer, Manga> mangasMap;
+    final Map<Integer, Manga2> mangasMap;
     
     public static void main(String[] args) throws ClassNotFoundException, IOException, URISyntaxException, InstantiationException, IllegalAccessException, SQLException {
 
@@ -78,10 +80,10 @@ public class Main {
             return;
         }
         if(CMD.SCRAPPERS.test()){
-            System.out.println(yellow("available scrappers: \n  ")+String.join("\n  ", Scrapper.availableScrappers()));
+            System.out.println(yellow("available scrappers: \n  ")+String.join("\n  ", Scrapper2.availableScrappers()));
             
             if(args.length > 1 && args[1].equalsIgnoreCase("-c")) {
-                Class<? extends AbstractScrapper> s = Scrapper.getInstance().getCurrentScrapperClass();
+                Class<? extends AbstractScrapper> s = Scrapper2.getInstance().getCurrentScrapperClass();
                 System.out.println(yellow("\nscrapper in use: ")+s.getSimpleName()+"   ( "+s.getName()+" )");
             }
                 
@@ -92,6 +94,7 @@ public class Main {
         Main m = null;
 
         List<String> argsList = Stream.of(args).skip(1).collect(Collectors.toList());
+        Utils.setPrintFilter(argsList.remove("--print-filter"));
 
         if(CMD.TSV.test()){
             int sizeIndex = argsList.indexOf("size");
@@ -280,11 +283,11 @@ public class Main {
     @SuppressWarnings("unchecked")
     public Main() throws IOException, ClassNotFoundException {
         Path p = Paths.get("working_backup.dat");
-        Map<Integer, Manga> map = null;
+        Map<Integer, Manga2> map = null;
 
         if(Files.exists(p)){
             try(ObjectInputStream oos = new ObjectInputStream(Files.newInputStream(p, StandardOpenOption.READ))) {
-                map = (Map<Integer, Manga>) oos.readObject();
+                map = (Map<Integer, Manga2>) oos.readObject();
             } 
         }
         mangasMap = map == null ? new LinkedHashMap<>() : map;

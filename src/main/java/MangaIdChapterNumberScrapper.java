@@ -1,9 +1,8 @@
-import static sam.console.ansi.ANSI.red;
-import static sam.console.ansi.ANSI.yellow;
+import static sam.console.ANSI.red;
+import static sam.console.ANSI.yellow;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -19,19 +18,20 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
+import mangafoxscrapper.scrapper.Scrapper2;
 import sam.manga.downloader.Downloader;
 import sam.manga.newsamrock.SamrockDB;
 import sam.manga.newsamrock.mangas.MangasMeta;
+import sam.manga.scrapper.extras.Utils;
 import sam.manga.scrapper.manga.parts.ChapterFilter;
-import sam.manga.scrapper.manga.parts.Manga;
-import sam.manga.scrapper.scrappers.Scrapper;
+import sam.manga.scrapper.manga.parts.Manga2;
 import sam.properties.myconfig.MyConfig;
 import sam.tsv.Tsv;
 
 public class MangaIdChapterNumberScrapper {
-    private final Map<Integer, Manga> backupMangasMap;
+    private final Map<Integer, Manga2> backupMangasMap;
 
-    MangaIdChapterNumberScrapper(List<String> data, Map<Integer, Manga> backupMangasMap) throws URISyntaxException, IOException, InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException{
+    MangaIdChapterNumberScrapper(List<String> data, Map<Integer, Manga2> backupMangasMap) throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException{
         this.backupMangasMap = backupMangasMap;
 
         if(data.isEmpty()){
@@ -44,11 +44,11 @@ public class MangaIdChapterNumberScrapper {
             System.out.println(red("no manga id(s) found"));
             return;
         }
-        Map<Integer, Manga> mangaMap = prepareMangaMap(mangaIdChapFltrMap);
+        Map<Integer, Manga2> mangaMap = prepareMangaMap(mangaIdChapFltrMap);
         List<Integer> failed = new ArrayList<>();
 
         mangaIdChapFltrMap.forEach((id, missings) -> {
-            Manga m = backupMangasMap.get(id);
+            Manga2 m = backupMangasMap.get(id);
 
             if(m == null){
                 System.out.println(red("no manga data with id: "+id)); 
@@ -59,7 +59,7 @@ public class MangaIdChapterNumberScrapper {
                 failed.add(id);
             }
             else
-                System.out.println(yellow(id + ", "+m.dirName)+"\n   missings: "+missings);
+                System.out.println(yellow(id + ", "+m.dirName)+"\n   missings: "+(Utils.isPrintFilter() ? "" : missings));
         });
         Path p1 = Main.APP_HOME.resolve("-mc.log");
         Path p2 = Main.APP_HOME.resolve("last-mc");
@@ -98,17 +98,17 @@ public class MangaIdChapterNumberScrapper {
                 return;
             }
         }
-        Scrapper.getInstance().scrap(mangaMap);
+        Scrapper2.getInstance().scrap(mangaMap);
         new Downloader(Paths.get(MyConfig.MANGA_FOLDER), mangaMap);
     }
 
-    private Map<Integer, Manga> prepareMangaMap(Map<Integer, ChapterFilter> srcMangaIdChapFltrMap) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
-        Map<Integer, Manga> mangasMap = new LinkedHashMap<>();
+    private Map<Integer, Manga2> prepareMangaMap(Map<Integer, ChapterFilter> srcMangaIdChapFltrMap) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
+        Map<Integer, Manga2> mangasMap = new LinkedHashMap<>();
         List<Integer> missingMangas = new ArrayList<>();
         List<Integer> missingChapterMangas = new ArrayList<>();
 
         srcMangaIdChapFltrMap.forEach((mangaId, filter) -> {
-            Manga manga = backupMangasMap.get(mangaId);
+            Manga2 manga = backupMangasMap.get(mangaId);
             if(manga != null) {
                 mangasMap.put(mangaId, manga);
                 if(filter.hasTester())
@@ -124,12 +124,12 @@ public class MangaIdChapterNumberScrapper {
             return mangasMap;
         
         try(SamrockDB  db = new SamrockDB()) {
-            Map<Integer, String> mangaurls = missingMangas.isEmpty() ? new HashMap<>() : db.url().getUrls(missingMangas, Scrapper.getInstance().getUrlColumnName());
+            Map<Integer, String> mangaurls = missingMangas.isEmpty() ? new HashMap<>() : db.url().getUrls(missingMangas, Scrapper2.getInstance().getUrlColumnName());
 
             if(mangaurls.values().stream().anyMatch(Objects::isNull)) {
-                System.out.println("column-name: "+Scrapper.getInstance().getUrlColumnName());
+                System.out.println("column-name: "+Scrapper2.getInstance().getUrlColumnName());
                 
-                Tsv t = new Tsv(MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME, Scrapper.getInstance().getUrlColumnName());
+                Tsv t = new Tsv(MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME, Scrapper2.getInstance().getUrlColumnName());
 
                 mangaurls.values().removeIf(Objects::nonNull);
 
@@ -149,12 +149,12 @@ public class MangaIdChapterNumberScrapper {
             if(!missingMangas.isEmpty()) {
                 db.manga().select(missingMangas, rs -> {
                     int id = rs.getInt(MangasMeta.MANGA_ID);
-                    Manga manga = new Manga(rs, mangaurls.get(id));
+                    Manga2 manga = new Manga2(rs, mangaurls.get(id));
                     mangasMap.put(manga.id, manga);
                     backupMangasMap.put(manga.id, manga);
                 }, MangasMeta.MANGA_ID, MangasMeta.DIR_NAME, MangasMeta.MANGA_NAME);                
             }
-             srcMangaIdChapFltrMap.putAll(Scrapper.getInstance().getMissingsFilters(missingChapterMangas, db));
+             srcMangaIdChapFltrMap.putAll(Scrapper2.getInstance().getMissingsFilters(missingChapterMangas, db));
         }
         mangasMap.forEach((id, manga) -> manga.setFilter(srcMangaIdChapFltrMap.get(id)));
         

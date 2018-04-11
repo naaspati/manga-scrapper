@@ -5,7 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-import sam.myutils.myutils.MyUtils;
+import sam.myutils.MyUtils;
 
 public enum Errors {
     MANGA, 

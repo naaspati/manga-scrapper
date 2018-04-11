@@ -1,9 +1,9 @@
-import static sam.console.ansi.ANSI.createBanner;
-import static sam.console.ansi.ANSI.cyan;
-import static sam.console.ansi.ANSI.green;
-import static sam.console.ansi.ANSI.red;
-import static sam.console.ansi.ANSI.yellow;
-import static sam.swing.utils.SwingUtils.showErrorDialog;
+import static sam.console.ANSI.createBanner;
+import static sam.console.ANSI.cyan;
+import static sam.console.ANSI.green;
+import static sam.console.ANSI.red;
+import static sam.console.ANSI.yellow;
+import static sam.swing.SwingUtils.showErrorDialog;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,12 +15,12 @@ import java.util.Map;
 import java.util.function.DoublePredicate;
 import java.util.stream.Collectors;
 
+import mangafoxscrapper.scrapper.Scrapper2;
 import sam.manga.newsamrock.SamrockDB;
 import sam.manga.newsamrock.mangas.MangasMeta;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.manga.parts.ChapterFilter;
-import sam.manga.scrapper.manga.parts.Manga;
-import sam.manga.scrapper.scrappers.Scrapper;
+import sam.manga.scrapper.manga.parts.Manga2;
 import sam.properties.myconfig.MyConfig;
 import sam.sql.sqlite.SqliteManeger;
 import sam.tsv.Row;
@@ -30,7 +30,7 @@ public class TsvScrapper {
     private final Path NEW_MANGAS_TSV_PATH = Paths.get(MyConfig.NEW_MANGAS_TSV_PATH);
     private final Path UPDATED_MANGAS_TSV_PATH = Paths.get(MyConfig.UPDATED_MANGAS_TSV_PATH);
 
-    public TsvScrapper(Map<Integer, Manga> mangasMap,  final int extractSize) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
+    public TsvScrapper(Map<Integer, Manga2> mangasMap,  final int extractSize) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
         Tsv newTsv = null, updatedTsv = null;
 
         try {
@@ -56,7 +56,7 @@ public class TsvScrapper {
         }
 
         String mangaFormat = green("\n(%d/%d)  ")+cyan("Manga: %s");
-        Scrapper scrapper = Scrapper.getInstance();
+        Scrapper2 scrapper = Scrapper2.getInstance();
 
         if(updatedTsv != null){
             System.out.println(createBanner("Updated Mangas"));
@@ -66,7 +66,7 @@ public class TsvScrapper {
             Map<Integer, ChapterFilter> filters = null;
 
             try(SamrockDB samrock = new SamrockDB()) {
-                filters = Scrapper.getInstance().getMissingsFilters(updatedTsv.stream().map(r -> r.getInt(MangasMeta.MANGA_ID)).collect(Collectors.toList()), samrock); 
+                filters = Scrapper2.getInstance().getMissingsFilters(updatedTsv.stream().map(r -> r.getInt(MangasMeta.MANGA_ID)).collect(Collectors.toList()), samrock); 
             }
 
             for (Row row : updatedTsv) {
@@ -75,7 +75,7 @@ public class TsvScrapper {
                 System.out.printf(mangaFormat, ++count, total, row.get("manga_name"));
 
                 final Integer manga_id = Integer.parseInt(row.get("manga_id"));
-                Manga manga = mangasMap.putIfAbsent(manga_id, new Manga(row));
+                Manga2 manga = mangasMap.putIfAbsent(manga_id, new Manga2(row, scrapper));
                 manga = manga != null ? manga : mangasMap.get(manga_id);
 
                 scrapper.extractChapters(manga);
@@ -109,7 +109,7 @@ public class TsvScrapper {
                 System.out.printf(mangaFormat, ++count, total, row.get("manga_name"));
 
                 final Integer manga_id = row.getInt("manga_id");
-                Manga manga = mangasMap.putIfAbsent(manga_id, new Manga(row));
+                Manga2 manga = mangasMap.putIfAbsent(manga_id, new Manga2(row, scrapper));
                 manga = manga != null ? manga : mangasMap.get(manga_id);
 
                 scrapper.extractChapters(manga);
@@ -122,8 +122,8 @@ public class TsvScrapper {
         createdatabase(mangasMap);
     }
 
-    private void createdatabase(Map<Integer, Manga> mangasMap) {
-        Path db = Paths.get(Scrapper.getInstance().getUrlColumnName()+".db");
+    private void createdatabase(Map<Integer, Manga2> mangasMap) {
+        Path db = Paths.get(Scrapper2.getInstance().getUrlColumnName()+".db");
 
         try {
             Files.deleteIfExists(db);

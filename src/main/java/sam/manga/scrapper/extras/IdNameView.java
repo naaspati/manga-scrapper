@@ -43,6 +43,7 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
 import sam.fx.clipboard.FxClipboard;
+import sam.fx.helpers.FxClassHelper;
 import sam.fx.helpers.FxHelpers;
 import sam.fx.popup.FxPopupShop;
 import sam.manga.newsamrock.SamrockDB;
@@ -193,7 +194,7 @@ public class IdNameView extends Application implements EventHandler<KeyEvent>, C
         clipboard.visibleProperty().bind(Bindings.isNotEmpty(selectedItems));
         
         HBox bottom = new HBox(2, remove,clipboard);
-        FxHelpers.addClass(bottom, "selecte-btns");
+        FxClassHelper.addClass(bottom, "selecte-btns");
         bottom.setPadding(new Insets(5));
         root.setBottom(bottom);
         
