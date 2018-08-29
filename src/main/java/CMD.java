@@ -11,7 +11,6 @@ enum CMD {
     DB_UPDATE_CHAPTERS("-duc", "--db-chapters-update", "[chapter ids]  update page urls for given chapters"),
     CLEAN("clean", null, "clean what else?"),
     DB("db", null, "open id, name list"),
-    SCRAPPERS("scrappers", null, "print available scrappers, use -c print current scrapper")
     ;
 
     final String cmd1, cmd2, about;

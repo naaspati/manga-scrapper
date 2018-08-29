@@ -34,14 +34,12 @@ import java.util.stream.Stream;
 import javax.swing.JOptionPane;
 
 import javafx.application.Application;
-import mangafoxscrapper.scrapper.Scrapper2;
-import sam.fileutils.FilesUtils;
+import sam.fileutils.FileOpener;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.IdNameView;
 import sam.manga.scrapper.extras.Utils;
-import sam.manga.scrapper.manga.parts.Manga2;
-import sam.manga.scrapper.scrappers.AbstractScrapper;
-import sam.myutils.MyUtils;
+import sam.manga.scrapper.manga.parts.Manga;
+import sam.myutils.MyUtilsCmd;
 import sam.swing.SwingUtils;
 
 /**
@@ -53,9 +51,9 @@ import sam.swing.SwingUtils;
  *
  */
 public class Main {
-    private static final double VERSION = 1.97;
+    private static final double VERSION = 1.991;
     public static final Path APP_HOME = Paths.get(System.getenv("APP_HOME"));
-    final Map<Integer, Manga2> mangasMap;
+    final Map<Integer, Manga> mangasMap;
     
     public static void main(String[] args) throws ClassNotFoundException, IOException, URISyntaxException, InstantiationException, IllegalAccessException, SQLException {
 
@@ -79,16 +77,6 @@ public class Main {
             System.out.println(yellow("version: "+VERSION+"\n\n"));
             return;
         }
-        if(CMD.SCRAPPERS.test()){
-            System.out.println(yellow("available scrappers: \n  ")+String.join("\n  ", Scrapper2.availableScrappers()));
-            
-            if(args.length > 1 && args[1].equalsIgnoreCase("-c")) {
-                Class<? extends AbstractScrapper> s = Scrapper2.getInstance().getCurrentScrapperClass();
-                System.out.println(yellow("\nscrapper in use: ")+s.getSimpleName()+"   ( "+s.getName()+" )");
-            }
-                
-            return;
-        }
 
         Class.forName("org.sqlite.JDBC");
         Main m = null;
@@ -98,7 +86,7 @@ public class Main {
 
         if(CMD.TSV.test()){
             int sizeIndex = argsList.indexOf("size");
-            int size = -1;
+            int limit = -1;
 
             if(sizeIndex >= 0){
                 if(sizeIndex >= argsList.size() - 1){
@@ -106,23 +94,15 @@ public class Main {
                     return;
                 }
                 try {
-                    size = Integer.parseInt(argsList.get(sizeIndex + 1));
+                    limit = Integer.parseInt(argsList.get(sizeIndex + 1));
                 } catch (NumberFormatException e) {
                     System.out.println("failed to parse values: "+red(argsList.get(sizeIndex + 1))+" for option "+red("size"));
                     return;
                 }
             }
             m = new Main();
-            System.out.println("size: "+size);
-            new TsvScrapper(m.mangasMap, size);
-        }
-        else if(CMD.URL.test()){
-            if(argsList.isEmpty()){
-                System.out.println("no url specified");
-                return;
-            }
-            m = new Main();
-            new UrlScraper(argsList, m.mangasMap);
+            System.out.println("size: "+limit);
+            new TsvScrapper(m.mangasMap, limit < 0 ? Integer.MAX_VALUE : limit);
         }
         else if(CMD.MCHAP.test()){
             if(argsList.size() < 1)
@@ -130,7 +110,8 @@ public class Main {
             else{
                 SwingUtils.copyToClipBoard(String.join(" ", args));
                 m = new Main();
-                new MangaIdChapterNumberScrapper(argsList, m.mangasMap);
+                new MangaIdChapterNumberScrapper(argsList, m.mangasMap).start();
+                System.out.println(FINISHED_BANNER);
             }
         }
         else if(CMD.DB.test())
@@ -273,21 +254,21 @@ public class Main {
 
         System.out.println(FINISHED_BANNER);
 
-        MyUtils.beep(5);
+        MyUtilsCmd.beep(5);
 
         if(errorOccured)
-            FilesUtils.openFileNoError(new File("."));
+            new FileOpener().openFileNoError(new File("."));
 
     }
 
     @SuppressWarnings("unchecked")
     public Main() throws IOException, ClassNotFoundException {
         Path p = Paths.get("working_backup.dat");
-        Map<Integer, Manga2> map = null;
+        Map<Integer, Manga> map = null;
 
         if(Files.exists(p)){
             try(ObjectInputStream oos = new ObjectInputStream(Files.newInputStream(p, StandardOpenOption.READ))) {
-                map = (Map<Integer, Manga2>) oos.readObject();
+                map = (Map<Integer, Manga>) oos.readObject();
             } 
         }
         mangasMap = map == null ? new LinkedHashMap<>() : map;

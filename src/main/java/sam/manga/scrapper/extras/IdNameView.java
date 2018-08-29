@@ -43,8 +43,8 @@ import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
 import sam.fx.clipboard.FxClipboard;
+import sam.fx.helpers.FxButton;
 import sam.fx.helpers.FxClassHelper;
-import sam.fx.helpers.FxHelpers;
 import sam.fx.popup.FxPopupShop;
 import sam.manga.newsamrock.SamrockDB;
 import sam.manga.newsamrock.chapters.Chapter;
@@ -179,14 +179,14 @@ public class IdNameView extends Application implements EventHandler<KeyEvent>, C
         t.setAlignment(Pos.CENTER);
         root.setTop(t);
         
-        Button remove = FxHelpers.button("remove selected", "delete.png", e -> {
+        Button remove = FxButton.button("remove selected", "delete.png", e -> {
             TempManga manga = model.getSelectedItem();
             model.clearSelection();
             selectedItems.remove(manga);
             allData.add(manga);
             handle(null);
         });
-        Button clipboard = FxHelpers.button("copy selected", "clipboard.png", e -> {
+        Button clipboard = FxButton.button("copy selected", "clipboard.png", e -> {
             FxClipboard.copyToClipboard(selectedItems.stream().map(t1 -> t1.idString).collect(Collectors.joining(" ")));
             FxPopupShop.showHidePopup("selected copied", 1500);
         });
@@ -257,7 +257,7 @@ public class IdNameView extends Application implements EventHandler<KeyEvent>, C
         }
         if(newValue.lastChap == null) {
             try {
-                newValue.lastChap = samrock.chapter().getLastChapter(newValue.id);
+                newValue.lastChap = samrock.chapter().lastChapter().byMangaId(newValue.id);
             } catch (SQLException e1) {
                 FxPopupShop.showHidePopup("failed to load lastchap: \nmanga_id: "+newValue.id+"  \nmanga_name:"+newValue.name, 2500);
             }

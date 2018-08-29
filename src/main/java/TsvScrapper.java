@@ -1,6 +1,4 @@
 import static sam.console.ANSI.createBanner;
-import static sam.console.ANSI.cyan;
-import static sam.console.ANSI.green;
 import static sam.console.ANSI.red;
 import static sam.console.ANSI.yellow;
 import static sam.swing.SwingUtils.showErrorDialog;
@@ -11,36 +9,36 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
-import java.util.function.DoublePredicate;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
-import mangafoxscrapper.scrapper.Scrapper2;
-import sam.manga.newsamrock.SamrockDB;
-import sam.manga.newsamrock.mangas.MangasMeta;
-import sam.manga.scrapper.extras.Errors;
-import sam.manga.scrapper.manga.parts.ChapterFilter;
-import sam.manga.scrapper.manga.parts.Manga2;
-import sam.properties.myconfig.MyConfig;
-import sam.sql.sqlite.SqliteManeger;
-import sam.tsv.Row;
+import mangafoxscrapper.scrapper.Scrapper;
+import mangafoxscrapper.scrapper.Scraps;
+import sam.config.MyConfig;
+import sam.manga.scrapper.manga.parts.Chapter;
+import sam.manga.scrapper.manga.parts.Manga;
+import sam.manga.scrapper.manga.parts.Page;
+import sam.sql.sqlite.SQLiteManeger;
 import sam.tsv.Tsv;
 
 public class TsvScrapper {
-    private final Path NEW_MANGAS_TSV_PATH = Paths.get(MyConfig.NEW_MANGAS_TSV_PATH);
-    private final Path UPDATED_MANGAS_TSV_PATH = Paths.get(MyConfig.UPDATED_MANGAS_TSV_PATH);
+    private final Path NEW_MANGAS_TSV_FILE = Paths.get(MyConfig.NEW_MANGAS_TSV_FILE);
+    private final Path UPDATED_MANGAS_TSV_FILE = Paths.get(MyConfig.UPDATED_MANGAS_TSV_FILE);
+    private Scrapper scrapper;
 
-    public TsvScrapper(Map<Integer, Manga2> mangasMap,  final int extractSize) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
+    public TsvScrapper(Map<Integer, Manga> mangasMap, int limit) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
         Tsv newTsv = null, updatedTsv = null;
 
         try {
-            if(Files.exists(NEW_MANGAS_TSV_PATH))
-                newTsv = Tsv.parse(NEW_MANGAS_TSV_PATH);
+            if(Files.exists(NEW_MANGAS_TSV_FILE))
+                newTsv = Tsv.parse(NEW_MANGAS_TSV_FILE);
             else
                 System.out.println(red("newManga List not exists"));
 
-            if(Files.exists(UPDATED_MANGAS_TSV_PATH))
-                updatedTsv = Tsv.parse(UPDATED_MANGAS_TSV_PATH);
+            if(Files.exists(UPDATED_MANGAS_TSV_FILE))
+                updatedTsv = Tsv.parse(UPDATED_MANGAS_TSV_FILE);
             else
                 System.out.println(red("no updates"));
         } catch (Exception e) {
@@ -54,76 +52,39 @@ public class TsvScrapper {
             System.out.println(yellow("No Data to extract"));
             return;
         }
-
-        String mangaFormat = green("\n(%d/%d)  ")+cyan("Manga: %s");
-        Scrapper2 scrapper = Scrapper2.getInstance();
+        
+        Scraps scraps = null;
 
         if(updatedTsv != null){
             System.out.println(createBanner("Updated Mangas"));
-            int count = 0;
-            final int total = updatedTsv.size();
-
-            Map<Integer, ChapterFilter> filters = null;
-
-            try(SamrockDB samrock = new SamrockDB()) {
-                filters = Scrapper2.getInstance().getMissingsFilters(updatedTsv.stream().map(r -> r.getInt(MangasMeta.MANGA_ID)).collect(Collectors.toList()), samrock); 
-            }
-
-            for (Row row : updatedTsv) {
-                DoublePredicate filter = filters.get(row.getInt(MangasMeta.MANGA_ID)).getTester();
-
-                System.out.printf(mangaFormat, ++count, total, row.get("manga_name"));
-
-                final Integer manga_id = Integer.parseInt(row.get("manga_id"));
-                Manga2 manga = mangasMap.putIfAbsent(manga_id, new Manga2(row, scrapper));
-                manga = manga != null ? manga : mangasMap.get(manga_id);
-
-                scrapper.extractChapters(manga);
-
-                if(manga.isEmpty()){
-                    System.out.println(red("  no chapters extracted"));
-                    Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga_id, manga.mangaName);
-                    mangasMap.remove(manga_id);
-                    continue;
-                }   
-
-                int ttl = manga.chaptersCount();
-                manga.removeChapterIf(c -> !filter.test(c.number));
-
-                if(manga.isEmpty()){
-                    System.out.println(red("no chapters to download"));
-                    mangasMap.remove(manga_id);
-                    continue;
-                }
-
-                System.out.printf("\tchap_count: %s, missing_count: %s\n", ttl, manga.chaptersCount());
-                scrapper.processChapters(count+"/"+total, manga);
-            }
+            MangaIdChapterNumberScrapper mc = new MangaIdChapterNumberScrapper(updatedTsv.stream().map(r -> r.get("manga_id")).collect(Collectors.toList()), mangasMap);
+            mc.start(updatedTsv.size() + Optional.ofNullable(newTsv).map(Tsv::size).orElse(0));
+            scraps = mc.getScraps();
+            this.scrapper = mc.scrapper();
         }
         if(newTsv != null){
+        	scrapper = scrapper != null ? scrapper : new Scrapper();
+        	
             System.out.println("\n\n"+createBanner("New Mangas"));
-            int count = 0;
-            final int total = newTsv.size();
 
-            for (Row row : newTsv) {
-                System.out.printf(mangaFormat, ++count, total, row.get("manga_name"));
-
-                final Integer manga_id = row.getInt("manga_id");
-                Manga2 manga = mangasMap.putIfAbsent(manga_id, new Manga2(row, scrapper));
-                manga = manga != null ? manga : mangasMap.get(manga_id);
-
-                scrapper.extractChapters(manga);
-
-                int ttl = manga.chaptersCount();
-                System.out.printf("\tchap_count: %s, missing_count: %s\n", ttl, extractSize < 0 || extractSize > ttl ? ttl :  extractSize );
-                scrapper.processChapters(count+"/"+total, manga, extractSize);
-            }
+            List<Manga> mangas = newTsv
+                    .stream()
+                    .map(row -> {
+                        final Integer manga_id = Integer.parseInt(row.get("manga_id"));
+                        Manga manga = mangasMap.putIfAbsent(manga_id, new Manga(row, scrapper.urlColumn()));
+                        return manga != null ? manga : mangasMap.get(manga_id);
+                    })
+                    .collect(Collectors.toList());
+            
+            scraps = scraps != null ? scraps : new Scraps(scrapper, mangas, Integer.MAX_VALUE, mangas.size());
+            scraps.setMangas(mangas);
+            scraps.scrap();
         }
-        createdatabase(mangasMap);
+        // this is to be remove, since Downloader uses on-the-fly scrapping+download createdatabase(mangasMap);
     }
 
-    private void createdatabase(Map<Integer, Manga2> mangasMap) {
-        Path db = Paths.get(Scrapper2.getInstance().getUrlColumnName()+".db");
+    private void createdatabase(Map<Integer, Manga> mangasMap) {
+        Path db = Paths.get(scrapper.urlColumn()+".db");
 
         try {
             Files.deleteIfExists(db);
@@ -132,7 +93,7 @@ public class TsvScrapper {
             e.printStackTrace();
             return;
         }
-        try (SqliteManeger c = new SqliteManeger(db.toString(), true)) {
+        try (SQLiteManeger c = new SQLiteManeger(db.toString())) {
             c.createDefaultStatement();
 
             String pagesSql = 
@@ -191,36 +152,36 @@ public class TsvScrapper {
                         return;
                     }
 
-                    manga.forEach((chapter_number, chapter) -> {
+                    for (Chapter chapter : manga) {
                         int chapterId = chapter.getHashId();
                         try {
                             addChapter.setInt(1, chapterId);
                             addChapter.setInt(2, manga_id);
-                            addChapter.setString(3, chapter.volume);
-                            addChapter.setDouble(4, chapter.number);
-                            addChapter.setString(5, chapter.title);
-                            addChapter.setString(6, chapter.url);
-                            addChapter.setInt(7, chapter.getPageCount());
+                            addChapter.setString(3, chapter.getVolume());
+                            addChapter.setDouble(4, chapter.getNumber());
+                            addChapter.setString(5, chapter.getTitle());
+                            addChapter.setString(6, chapter.getUrl());
+                            addChapter.setInt(7, chapter.nonNullPageCount());
                             addChapter.addBatch();
                         } catch (SQLException e) {
                             System.out.println(red("failed to add chapter to db: ")+chapter);
-                            return;
+                            continue;
                         }
 
-                        chapter.forEach(page -> {
+                        for(Page page: chapter) {
                             try {
                                 addPage.setInt(1, chapterId);
                                 addPage.setInt(2, manga_id);
-                                addPage.setInt(3, page.order);
-                                addPage.setString(4, page.pageUrl);
-                                addPage.setString(5, page.imageUrl);
+                                addPage.setInt(3, page.getOrder());
+                                addPage.setString(4, page.getPageUrl());
+                                addPage.setString(5, page.getImageUrl());
                                 addPage.addBatch();
                             } catch (SQLException e) {
                                 System.out.println(red("failed to add page to db: ")+page);
-                                return;
+                                continue;
                             }
-                        });
-                    });
+                        }
+                    }
                 }); 
 
                 System.out.println(yellow("\n Commits"));
@@ -229,7 +190,7 @@ public class TsvScrapper {
                 System.out.println("pages: "+addPage.executeBatch().length);
             }
             c.commit();
-        }catch(SQLException | InstantiationException | IllegalAccessException | ClassNotFoundException | IOException e){
+        }catch(SQLException | InstantiationException | IllegalAccessException | ClassNotFoundException e){
             showErrorDialog("Failed to create database", e);
         }
     }

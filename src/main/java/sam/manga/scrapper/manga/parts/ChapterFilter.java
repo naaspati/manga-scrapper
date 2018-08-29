@@ -2,7 +2,6 @@ package sam.manga.scrapper.manga.parts;
 
 import java.util.Arrays;
 import java.util.function.DoublePredicate;
-import java.util.stream.DoubleStream;
 
 import sam.console.ANSI;
 import sam.manga.scrapper.extras.Utils;
@@ -12,8 +11,8 @@ public class ChapterFilter {
     private DoublePredicate tester;
     private StringBuilder sb = new StringBuilder("[");
     
-    public ChapterFilter(DoubleStream.Builder bld) {
-        double[] array = bld.build().sorted().toArray();
+    public ChapterFilter(double[] array) {
+        Arrays.sort(array);
         tester = d -> Arrays.binarySearch(array, d) < 0;
         if(Utils.isPrintFilter()) {
             sb.append("NOT IN -> ");

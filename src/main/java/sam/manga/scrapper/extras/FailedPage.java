@@ -2,11 +2,9 @@ package sam.manga.scrapper.extras;
 
 import java.nio.file.Path;
 
-import sam.manga.scrapper.manga.parts.Chapter2;
-import sam.manga.scrapper.manga.parts.Manga2;
-import sam.manga.scrapper.units.Chapter;
-import sam.manga.scrapper.units.Manga;
-import sam.manga.scrapper.units.Page;
+import sam.manga.scrapper.manga.parts.Chapter;
+import sam.manga.scrapper.manga.parts.Manga;
+import sam.manga.scrapper.manga.parts.Page;
 
 public  class FailedPage {
     public final Path target;

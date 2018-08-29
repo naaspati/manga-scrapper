@@ -5,7 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-import sam.myutils.MyUtils;
+import sam.myutils.MyUtilsException;
 
 public enum Errors {
     MANGA, 
@@ -21,21 +21,21 @@ public enum Errors {
 
     private volatile StringBuilder errors;
 
-    public synchronized void addError(Integer mangaid, Double chapterNumber, Exception e, Object...msgs) {
+    public synchronized void addError(Integer mangaid, Double chapterid,  Exception e, Object...msgs) {
         if(errors == null) errors = new StringBuilder();
 
         if(msgs != null && msgs.length != 0) {
-            errors.append(mangaid).append(separator).append(chapterNumber).append(separator);
+            errors.append(mangaid).append(separator);
             for (Object s : msgs) errors.append(s).append(separator);
             errors.setLength(errors.length() - separator.length);
         }
 
         if(e != null)
-            errors.append('\t').append(MyUtils.exceptionToString(e));
+            errors.append('\t').append(MyUtilsException.exceptionToString(e));
         errors.append('\n');
 
-        if(mangaid != null)
-            addFailedMangaIdChapterNumber(mangaid, chapterNumber); 
+        if(chapterid != null)
+            addFailedMangaIdChapterNumber(mangaid, chapterid); 
     }
     public StringBuilder getErrors() {
         return errors;
