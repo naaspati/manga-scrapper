@@ -51,7 +51,7 @@ import sam.swing.SwingUtils;
  *
  */
 public class Main {
-    private static final double VERSION = 1.991;
+    private static final double VERSION = 1.992;
     public static final Path APP_HOME = Paths.get(System.getenv("APP_HOME"));
     final Map<Integer, Manga> mangasMap;
     
