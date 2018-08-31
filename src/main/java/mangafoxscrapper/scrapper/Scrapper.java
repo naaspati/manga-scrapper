@@ -24,7 +24,9 @@ public class Scrapper extends ScrapperCached {
 
 		return map;
 	}
-	public InternetUtils internetUtils() {
-		return  new InternetUtils(true);
+	@Override
+	protected InternetUtils createInternetUtils() {
+		return new InternetUtils(true);
 	}
+	
 }

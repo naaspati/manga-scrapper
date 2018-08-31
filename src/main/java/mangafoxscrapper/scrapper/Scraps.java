@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 import javax.swing.JOptionPane;
 
 import sam.config.MyConfig;
-import sam.fileutils.FilesUtils;
+import sam.fileutils.FilesUtilsIO;
 import sam.internetutils.InternetUtils;
 import sam.manga.newsamrock.converter.ConvertChapter;
 import sam.manga.scrapper.ScrapperManga;
@@ -80,7 +80,7 @@ public class Scraps {
 		this.limit = limit;
 		totalMangas = mangasSize;
 		this.mangas = mangas;
-		this.internetUtils = scrapper.internetUtils();
+		this.internetUtils = scrapper.getInternetUtils();
 	}
 	public void setMangas(Iterable<Manga> mangas) {
 		this.mangas = mangas;
@@ -278,7 +278,7 @@ public class Scraps {
 		try {
 			Path path = Paths.get("chapters.tsv");
 			if(Files.exists(path)) {
-				Path p = FilesUtils.findPathNotExists(path);
+				Path p = FilesUtilsIO.findPathNotExists(path);
 				Files.move(path, p);
 				System.out.println(path+"  moved to -> "+p);
 			} 

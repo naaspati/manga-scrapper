@@ -34,7 +34,7 @@ import java.util.stream.Stream;
 import javax.swing.JOptionPane;
 
 import javafx.application.Application;
-import sam.fileutils.FileOpener;
+import sam.fileutils.FileOpenerNE;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.IdNameView;
 import sam.manga.scrapper.extras.Utils;
@@ -257,8 +257,7 @@ public class Main {
         MyUtilsCmd.beep(5);
 
         if(errorOccured)
-            new FileOpener().openFileNoError(new File("."));
-
+            FileOpenerNE.openFile(new File("."));
     }
 
     @SuppressWarnings("unchecked")
