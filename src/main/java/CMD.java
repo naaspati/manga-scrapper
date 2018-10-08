@@ -9,7 +9,6 @@ enum CMD {
     URL("-u", "--url", "extract scrap and download using url, (range can be supplied of chapter)"),
     TSV("-t", "--tsv", "extract for data in updatedManga.tsv, newManga.tsv "),
     DB_UPDATE_CHAPTERS("-duc", "--db-chapters-update", "[chapter ids]  update page urls for given chapters"),
-    CLEAN("clean", null, "clean what else?"),
     DB("db", null, "open id, name list"),
     ;
 

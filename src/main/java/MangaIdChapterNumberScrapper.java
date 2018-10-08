@@ -21,8 +21,10 @@ import java.util.function.Function;
 import mangafoxscrapper.scrapper.Scrapper;
 import mangafoxscrapper.scrapper.Scraps;
 import sam.config.MyConfig;
-import sam.manga.newsamrock.SamrockDB;
-import sam.manga.newsamrock.mangas.MangasMeta;
+import sam.manga.samrock.SamrockDB;
+import sam.manga.samrock.mangas.MangaUtils;
+import sam.manga.samrock.mangas.MangasMeta;
+import sam.manga.samrock.urls.MangaUrlsUtils;
 import sam.manga.scrapper.extras.Utils;
 import sam.manga.scrapper.manga.parts.ChapterFilter;
 import sam.manga.scrapper.manga.parts.Manga;
@@ -141,7 +143,10 @@ public class MangaIdChapterNumberScrapper {
 			return mangasMap;
 
 		try(SamrockDB  db = new SamrockDB()) {
-			Map<Integer, String> mangaurls = missingMangas.isEmpty() ? new HashMap<>() : db.url().getUrls(missingMangas, scrapper().urlColumn());
+			MangaUtils mangas = new MangaUtils(db);
+			MangaUrlsUtils urls = new MangaUrlsUtils(db);
+			
+			Map<Integer, String> mangaurls = missingMangas.isEmpty() ? new HashMap<>() : urls.getUrls(missingMangas, scrapper().urlColumn());
 
 			if(mangaurls.values().stream().anyMatch(Objects::isNull)) {
 				System.out.println("column-name: "+scrapper().urlColumn());
@@ -150,7 +155,7 @@ public class MangaIdChapterNumberScrapper {
 
 				mangaurls.values().removeIf(Objects::nonNull);
 
-				db.manga().select(mangaurls.keySet(), 
+				mangas.select(mangaurls.keySet(), 
 						rs -> t.addRow(rs.getString(MangasMeta.MANGA_ID), rs.getString(MangasMeta.MANGA_NAME)), 
 						MangasMeta.MANGA_ID, MangasMeta.MANGA_NAME);
 
@@ -164,7 +169,7 @@ public class MangaIdChapterNumberScrapper {
 				System.exit(0);
 			}
 			if(!missingMangas.isEmpty()) {
-				db.manga().select(missingMangas, rs -> {
+				mangas.select(missingMangas, rs -> {
 					int id = rs.getInt(MangasMeta.MANGA_ID);
 					Manga manga = new Manga(rs, mangaurls.get(id));
 					mangasMap.put(manga.id, manga);

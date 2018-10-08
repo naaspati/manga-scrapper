@@ -1,42 +1,29 @@
 
-import static sam.console.ANSI.ANSI_CLOSE;
 import static sam.console.ANSI.FINISHED_BANNER;
 import static sam.console.ANSI.createUnColoredBanner;
-import static sam.console.ANSI.green;
 import static sam.console.ANSI.red;
 import static sam.console.ANSI.yellow;
-import static sam.swing.SwingUtils.showErrorDialog;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.URISyntaxException;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.swing.JOptionPane;
-
-import javafx.application.Application;
 import sam.fileutils.FileOpenerNE;
 import sam.manga.scrapper.extras.Errors;
-import sam.manga.scrapper.extras.IdNameView;
 import sam.manga.scrapper.extras.Utils;
 import sam.manga.scrapper.manga.parts.Manga;
 import sam.myutils.MyUtilsCmd;
@@ -51,7 +38,7 @@ import sam.swing.SwingUtils;
  *
  */
 public class Main {
-    private static final double VERSION = 1.992;
+    private static final double VERSION = 1.994;
     public static final Path APP_HOME = Paths.get(System.getenv("APP_HOME"));
     final Map<Integer, Manga> mangasMap;
     
@@ -67,10 +54,6 @@ public class Main {
 
         if(CMD.HELP.test()){
             CMD.showHelp();
-            return;
-        }
-        if(CMD.CLEAN.test()){
-            clean();
             return;
         }
         if(CMD.VERSION.test()){
@@ -114,8 +97,6 @@ public class Main {
                 System.out.println(FINISHED_BANNER);
             }
         }
-        else if(CMD.DB.test())
-            Application.launch(IdNameView.class, args);
         else{
             System.out.println(red("failed to recognize command: ")+Arrays.toString(args));
             CMD.showHelp();
@@ -123,93 +104,6 @@ public class Main {
         
         if(m != null)
             m.notifyme();
-    }
-
-    private static void clean() {
-        System.out.println("\n");
-        File[] paths = new File(".").listFiles(f -> f.isFile() && !f.getName().equals("ms.bat"));
-
-        Path downloads = Paths.get("downloaded");
-
-        if((paths == null || paths.length == 0) && Files.notExists(downloads)) {
-            System.out.println(green("nothing to clean"));
-            System.exit(0);
-        }
-        for (File p : paths)
-            System.out.println(yellow(p.getName()));
-
-        List<Path> files  = new ArrayList<>(), 
-                dirs = new ArrayList<>();
-
-        if(Files.exists(downloads)) {
-            System.out.println(yellow("\n-------------------------"));
-            try {
-                int count = downloads.getNameCount();
-                BiConsumer<Path, Boolean> fill = (path, isDir) -> {
-                    int d = path.getNameCount() - count;
-                    if(d == 0) {
-                        System.out.println(green(" "+path));
-                        return;
-                    }
-
-                    StringBuilder sb = new StringBuilder(isDir ? " \u001b[32m" : " ");
-                    for (int i = 0; i < d; i++) sb.append('|').append(' ');
-                    sb.append(path.getFileName());
-
-                    sb.append(isDir ? ANSI_CLOSE : "");
-
-                    System.out.println(sb.toString());
-                };
-
-                Files.walkFileTree(downloads, new SimpleFileVisitor<Path>() {
-                    @Override
-                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                        fill.accept(dir, true);
-                        dirs.add(dir);
-                        return FileVisitResult.CONTINUE;
-                    }
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                        files.add(file);
-                        fill.accept(file, false);
-                        return FileVisitResult.CONTINUE;
-                    }
-                });
-            } catch (IOException e) {
-                showErrorDialog("failed to list download contents", e);
-                System.exit(0);
-            }
-        }
-
-        if(JOptionPane.showConfirmDialog(null, "sure to delete?") != JOptionPane.YES_OPTION)
-            return;
-
-        BiConsumer<List<Path>, Boolean> delete = (list, isDirs) -> {
-            if(list.isEmpty())
-                return;
-
-            if(isDirs)
-                Collections.sort(list, (a,b) -> Integer.compare(b.getNameCount(), a.getNameCount()));
-
-            for (Path p : list) {
-                try {
-                    Files.deleteIfExists(p);
-                    System.out.println(green(p.getFileName()));
-                } catch (Exception e) {
-                    System.out.println(red(p.getFileName())+"  "+e);
-                }
-            }
-            System.out.println();
-        };
-
-        System.out.println(yellow("\n\n-------------------------\nDELETING\n"));
-
-        if(paths != null && paths.length != 0) {
-            for (File f : paths)
-                System.out.println(f+"  "+(f.delete() ? green("success") : red("failed")));
-        }
-        delete.accept(files, false);
-        delete.accept(dirs, true);
     }
     private void notifyme() {
         boolean errorOccured = Stream.of(Errors.values()).anyMatch(e -> e.getErrors() != null);

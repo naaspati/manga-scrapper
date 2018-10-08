@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.Map;
 
 import sam.internetutils.InternetUtils;
-import sam.manga.newsamrock.SamrockDB;
+import sam.manga.samrock.SamrockDB;
+import sam.manga.samrock.chapters.ChapterUtils;
 import sam.manga.scrapper.manga.parts.ChapterFilter;
 import sam.manga.scrapper.scrappers.impl.ScrapperCached;
 
@@ -18,7 +19,7 @@ public class Scrapper extends ScrapperCached {
 	public Map<Integer, ChapterFilter> getMissingsFilters(List<Integer> mangaIds, SamrockDB db) throws SQLException {
 		Map<Integer, ChapterFilter> map = new HashMap<>();
 
-		db.chapter()
+		new ChapterUtils(db)
 		.chapterNumbers().byMangaIds(mangaIds)
 		.forEach((id, chaps) -> map.put(id, new ChapterFilter(chaps)));
 

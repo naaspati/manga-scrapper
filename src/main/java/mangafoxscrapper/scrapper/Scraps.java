@@ -35,9 +35,9 @@ import java.util.stream.Collectors;
 import javax.swing.JOptionPane;
 
 import sam.config.MyConfig;
-import sam.fileutils.FilesUtilsIO;
+import sam.fileutils.FileNameSanitizer;
 import sam.internetutils.InternetUtils;
-import sam.manga.newsamrock.converter.ConvertChapter;
+import sam.manga.samrock.converter.ConvertChapter;
 import sam.manga.scrapper.ScrapperManga;
 import sam.manga.scrapper.extras.Errors;
 import sam.manga.scrapper.extras.FailedPage;
@@ -46,7 +46,9 @@ import sam.manga.scrapper.manga.parts.Chapter;
 import sam.manga.scrapper.manga.parts.Manga;
 import sam.manga.scrapper.manga.parts.Page;
 import sam.manga.scrapper.scrappers.MangaScrapListener;
+import sam.myutils.MyUtilsCheck;
 import sam.myutils.MyUtilsException;
+import sam.myutils.MyUtilsPath;
 import sam.myutils.MyUtilsSystem;
 import sam.string.StringBuilder2;
 import sam.string.StringUtils;
@@ -56,7 +58,8 @@ import sam.tsv.Tsv;
 public class Scraps {
 	private final Scrapper scrapper;
 	private int mangaProgress, chapterProgress, totalChaptersProgress; 
-	private final int totalMangas;    
+	private final int totalMangas;
+	private int mangaFailed, chapterFailed;
 	private String nextChapterFormat, finalProgressFormat;
 	private final int limit;
 	private final InternetUtils internetUtils;
@@ -65,7 +68,7 @@ public class Scraps {
 
 	// 1 -> manga.chaptersCount();
 	private final String nextChapFormatBase = green("  (%%s/%s) ")+yellow("Chapter: ")+"%%s %%s";
-	private final String totalProgessFormatBase = "\n\n\n"+yellow("chapter: ")+"%%s(%%s)/%s"+ cyan("  |  ")+ yellow("manga: ")+"%s/%s"+yellow("  |  failed pages: ")+"%%s";
+	private final String totalProgessFormatBase = "\n\n\n"+yellow("chapter: ")+"%%s/%s t:%%s"+ cyan("  |  ")+ yellow("manga: ")+"%s/%s"+yellow("  |  failed: (M: ")+"%%s, "+yellow("C: ")+"%%s, "+yellow("P: ")+"%%s"+yellow(" )");
 	private final String aboutMangaFormat = new StringBuilder2()
 			.green("(%s/%s)").ln()
 			.repeat(' ', 5).yellow("id: ").append("%s")
@@ -98,10 +101,12 @@ public class Scraps {
 			mangaProgress++;
 
 			if(manga.url == null || manga.dirName == null){
+				mangaFailed++;
 				System.out.println("\n"+red("SKIPPED:  url == null || dir == null"));
 				continue;
 			}
 
+			erase_down();
 			System.out.printf(aboutMangaFormat, mangaProgress, totalMangas, manga.id, Utils.stringOf(manga.dirName), Utils.stringOf(manga.url));
 			List<Chapter> chapters;
 
@@ -109,6 +114,7 @@ public class Scraps {
 				ScrapperManga sm = scrapper.getManga(manga.url);
 				chapters = sm.getChapters(mangalistener).map(c -> new Chapter(manga.id, c)).collect(Collectors.toList());
 			} catch (Exception e1) {
+				mangaFailed++;
 				Errors.NO_CHAPTERS_SCRAPPED.addError(manga.id, null, null, manga.mangaName);
 				continue;
 			}
@@ -152,6 +158,7 @@ public class Scraps {
 				try {
 					pages = chapter.loadPages();
 				} catch (Exception e) {
+					chapterFailed++;
 					erase();
 					System.out.println(red(" pages extracting failed: ")+e);
 					Errors.CHAPTER.addError(manga.id, chapter.getNumber(), e, "scrapping pages failed: ", chapter.getTitle());
@@ -161,14 +168,14 @@ public class Scraps {
 				totalProgress();
 
 				if(pages.isEmpty()) {
-					System.out.println(red("  -> NO PAGES EXTRACTED"));
+					System.out.println(chapter.getUrl()+"  "+red("  -> NO PAGES EXTRACTED"));
 					continue;
 				}
 
 				System.out.print(cyan(" ("+pages.size()+") "));
 				final Path chapterFolder = chapter.dirPath(mangaDir, manga);
 
-				ConvertChapter cc = new ConvertChapter(chapter.mangaid, chapter.getNumber(), chapter.getTitle(), chapterFolder, chapterFolder);
+				ConvertChapter cc = new ConvertChapter(chapter.mangaid, chapter.getNumber(), MyUtilsCheck.isEmpty(chapter.getTitle()) ? "" : FileNameSanitizer.removeInvalidCharsFromFileName(chapter.getTitle()), chapterFolder, chapterFolder);
 				convertChapters.add(cc);
 
 				String[] files = chapterFolder.toFile().list();
@@ -209,6 +216,8 @@ public class Scraps {
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
+				chapterFolder.toFile().delete();
+				erase();
 				System.out.println();
 			}
 		}
@@ -219,9 +228,12 @@ public class Scraps {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
-
 		retryFailedPages();
 		finish();
+		
+		save_cursor();
+		erase();
+		totalProgress();
 	}
 	private void retryFailedPages() {
 		if(failedPages == null || failedPages.isEmpty())
@@ -235,7 +247,7 @@ public class Scraps {
 				chapters.stream()
 				.collect(Collectors.groupingBy(f -> f.chapter))
 				.forEach((chapter, pages) -> {
-					System.out.print(yellow(chapter.getNumber()+" "+Utils.stringOf(chapter.getTitle()))+(chapters.size() == 1 ? " " : "\n"));
+					System.out.print(yellow(chapter.getNumber()+" "+Utils.stringOf(chapter.getTitle()))+": ");
 
 					for (FailedPage f : pages) {
 						Page page = f.page;
@@ -278,7 +290,7 @@ public class Scraps {
 		try {
 			Path path = Paths.get("chapters.tsv");
 			if(Files.exists(path)) {
-				Path p = FilesUtilsIO.findPathNotExists(path);
+				Path p = MyUtilsPath.findPathNotExists(path);
 				Files.move(path, p);
 				System.out.println(path+"  moved to -> "+p);
 			} 
@@ -337,7 +349,7 @@ public class Scraps {
 	}
 	public void totalProgress() {
 		save_cursor();
-		System.out.printf(finalProgressFormat, chapterProgress, totalChaptersProgress, failedPages.size());
+		System.out.printf(finalProgressFormat, chapterProgress, totalChaptersProgress, mangaFailed, chapterFailed, failedPages.size());
 		unsave_cursor();
 	}
 	MangaScrapListener mangalistener = new MangaScrapListener() {

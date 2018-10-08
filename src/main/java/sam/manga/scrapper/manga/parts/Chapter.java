@@ -6,7 +6,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import sam.collection.Iterators;
-import sam.manga.newsamrock.chapters.ChapterUtils;
+import sam.manga.samrock.chapters.ChapterUtils;
 import sam.manga.scrapper.ScrapperChapter;
 
 public class Chapter implements Iterable<Page> {

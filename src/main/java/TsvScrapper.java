@@ -20,7 +20,7 @@ import sam.config.MyConfig;
 import sam.manga.scrapper.manga.parts.Chapter;
 import sam.manga.scrapper.manga.parts.Manga;
 import sam.manga.scrapper.manga.parts.Page;
-import sam.sql.sqlite.SQLiteManeger;
+import sam.sql.sqlite.SQLiteDB;
 import sam.tsv.Tsv;
 
 public class TsvScrapper {
@@ -93,7 +93,7 @@ public class TsvScrapper {
             e.printStackTrace();
             return;
         }
-        try (SQLiteManeger c = new SQLiteManeger(db.toString())) {
+        try (SQLiteDB c = new SQLiteDB(db.toString())) {
             c.createDefaultStatement();
 
             String pagesSql = 

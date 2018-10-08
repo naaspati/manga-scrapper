@@ -1,8 +1,7 @@
 package sam.manga.scrapper.manga.parts;
-import static sam.manga.newsamrock.mangas.MangasMeta.MANGA_ID;
-import static sam.manga.newsamrock.mangas.MangasMeta.MANGA_NAME;
-import static sam.manga.newsamrock.mangas.MangasMeta.getDirName;
-import static sam.manga.newsamrock.mangas.MangasMeta.getMangaId;
+import static sam.manga.samrock.mangas.MangasMeta.DIR_NAME;
+import static sam.manga.samrock.mangas.MangasMeta.MANGA_ID;
+import static sam.manga.samrock.mangas.MangasMeta.MANGA_NAME;
 
 import java.io.Serializable;
 import java.nio.file.Path;
@@ -14,8 +13,7 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 import sam.collection.Iterators;
-import sam.manga.newsamrock.mangas.MangaUtils;
-import sam.manga.newsamrock.mangas.MangasMeta;
+import sam.manga.samrock.mangas.MangaUtils;
 import sam.tsv.Row;
 
 public class Manga implements Iterable<Chapter>, Serializable {
@@ -37,7 +35,7 @@ public class Manga implements Iterable<Chapter>, Serializable {
     }
 
     public Manga(ResultSet rs, String url) throws SQLException {
-        this(getMangaId(rs), MangasMeta.getMangaName(rs), url, getDirName(rs));
+        this(rs.getInt(MANGA_ID), rs.getString(MANGA_NAME), url, rs.getString(DIR_NAME));
     }
     public Manga(Row row, String urlColumn) {
         this(row.getInt(MANGA_ID), row.get(MANGA_NAME), row.get(urlColumn), MangaUtils.toDirName(row.get(MANGA_NAME)));

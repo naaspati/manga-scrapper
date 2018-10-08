@@ -33,3 +33,5 @@ jar {
                    )
     }
 }
+
+defaultTasks 'iD', 'copy'
