@@ -6,32 +6,60 @@ repositories {
 }
 
 dependencies {
-    compile files('myutils.jar');
-    compile files('../Scrapper/build/libs/Scrapper.jar')
+    //compile files('myutils.jar');
+    compile 'org.json:json:20180130'
+    // compile fileTree(dir: '../Scrapper/build/libs', include:'*.jar')
+    // compile fileTree(dir: '../DownloaderDB/build/libs', include:'*.jar')
     compile group: 'org.xerial', name: 'sqlite-jdbc', version: '3.7.2'
     compile group: 'org.jsoup', name: 'jsoup', version: '1.10.3'
-   // testImplementation 'junit:junit:4.12'
 }
 
-version = 1.93
+version = 1.994
 sourceCompatibility = JavaVersion.VERSION_1_8 
 targetCompatibility = JavaVersion.VERSION_1_8
  
 mainClassName = 'Main'
+ext.appdir = file(/D:\Core Files\Emulator\dolphin\Manga\Data\MangaFox_Scraper\app/)
 
-task copy(type: Copy, dependsOn:'installDist') {
-  from(fileTree("$buildDir/install/${distributions.main.baseName}"))
-  into(/D:\Core Files\Emulator\dolphin\Manga\Data\MangaFox_Scraper\app/)
+task install(type: Copy, dependsOn:installDist) {
+  def libdir = file(new File(installDist.destinationDir, 'lib')) 
+  from libdir
+  into appdir
+  
+  doLast {
+     new File(appdir, 'run.cmd').text = """
+  @echo off
+  setlocal
+  
+  ${versionText()}
+  
+  java %JAVA_OPTS% -cp \"%~dp0${String.join(';%~dp0', libdir.list())}\" ${mainClassName} %*
+  
+  """.stripIndent()
+  } 
 }
 
-jar {
-  manifest {
-        attributes('Manifest-Version': '1.0',
-                   'Implementation-Version': version,
-                   'Main-Class':"$mainClassName",	
-                   'Class-Path':'.'
-                   )
-    }
+def versionText() {
+  if(!version && version == 'unspecified') return '';
+  return """
+  SET APP_VERSION=${version}
+  if [%1]==[-v] (
+    echo version: %APP_VERSION%
+    goto:eof
+  )
+  if [%1]==[--version] (
+    echo version: %APP_VERSION%
+    goto:eof
+  )
+  """;    
 }
 
-defaultTasks 'iD', 'copy'
+
+
+defaultTasks 'install'
+
+run {
+   environment['JSON_TOSTRING']=true
+   environment['DEFAULT_LOGGING_FILE']=true
+   
+}

@@ -1,4 +1,4 @@
-package sam.manga.scrapper.extras;
+package sam.ms.extras;
 
 public class Count{
     public int success = -1;
