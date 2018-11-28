@@ -35,7 +35,7 @@ public class MangaList implements Iterable<Manga> {
 
 	private MangaList() throws SQLException {
 		DownloaderDB db = new DownloaderDB(Paths.get("download.db"));
-		mangas = db.read(factory());
+		mangas = db.read(new DownloaderFactory());
 		mangas.forEach(m -> mangasMap.put(m.getMangaId(), m));
 
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -46,22 +46,6 @@ public class MangaList implements Iterable<Manga> {
 				e.printStackTrace();
 			}
 		}));
-	}
-	private DownloaderDBFactory factory() {
-		return new DownloaderDBFactory() {
-			@Override
-			public Manga createManga(int manga_id, String dir_name, String manga_name, String url, String error, String status) {
-				return new Manga(manga_id, dir_name, manga_name, url, error, DStatus.status(status));
-			}
-			@Override
-			public Chapter createChapter(IDManga manga, double number, String title, String volume, String source, String target, String url, String error, String status) {
-				return new Chapter(manga, number, title,volume, source, target, url, error, DStatus.status(status));
-			}
-			@Override
-			public Page createPage(IDChapter chapter, int order, String page_url, String img_url, String error, String status){
-				return new Page(chapter, order, page_url, img_url, error, DStatus.status(status));
-			}
-		};
 	}
 	public Manga get(int manga_id) {
 		return mangasMap.get(manga_id);

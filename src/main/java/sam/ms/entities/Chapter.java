@@ -4,17 +4,22 @@ import java.nio.file.Paths;
 
 import sam.downloader.db.entities.impl.DChapterImpl;
 import sam.downloader.db.entities.meta.DStatus;
-import sam.downloader.db.entities.meta.IDManga;
 import sam.manga.samrock.chapters.ChapterUtils;
 
 public class Chapter extends DChapterImpl {
+	private final Path path;
 	
-	public Chapter(IDManga manga, double number, String title, String url, String volume) {
+	 {
+		 this.path = getManga().getPath().resolve(ChapterUtils.makeChapterFileName(getNumber(), getTitle(), manga.getMangaName()));
+	 }
+	public Chapter(Manga manga, double number, String title, String url, String volume) {
 		super(manga, number, title, url);
 		this.volume =volume;
 	}
-	public Chapter(IDManga manga, double number, String title, String volume, Object source, Object target, String url, String error, DStatus status) {
+	
+	public Chapter(Manga manga, double number, String title, String volume, Object source, Object target, String url, String error, DStatus status) {
 		super(manga, number, title, volume, source, target, url, error, status);
+		
 	}
 	public int getHashId() { return getUrl().hashCode(); }
 	
@@ -32,9 +37,6 @@ public class Chapter extends DChapterImpl {
 		target = p;
 		return p;
 	}
-	public Path dirPath(Path mangaDir, Manga manga) {
-		return mangaDir.resolve(ChapterUtils.makeChapterFileName(getNumber(), getTitle(), manga.getMangaName()));
-	}
 	public void setSourceTarget(Path chapterFolder) {
 		this.source = chapterFolder;
 		this.target = chapterFolder;
@@ -42,5 +44,8 @@ public class Chapter extends DChapterImpl {
 	@Override
 	public Manga getManga() {
 		return (Manga)super.getManga();
+	}
+	public Path getPath() {
+		return path;
 	}
 }

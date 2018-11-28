@@ -22,6 +22,7 @@ import sam.manga.samrock.mangas.MangaUtils;
 import sam.manga.samrock.urls.MangaUrlsUtils;
 import sam.ms.entities.ChapterFilter;
 import sam.ms.entities.Manga;
+import sam.ms.extras.Utils;
 import sam.tsv.Tsv;
 
 public class FilterLoader {
@@ -74,7 +75,7 @@ public class FilterLoader {
 			if(!missingMangas.isEmpty()) {
 				mangas.select(missingMangas, rs -> {
 					int id = rs.getInt(MANGA_ID);
-					Manga manga = new Manga(rs, mangaurls.get(id));
+					Manga manga = new Manga(Utils.MANGA_DIR, rs, mangaurls.get(id));
 					mangasList.add(manga);
 				}, MANGA_ID, DIR_NAME, MANGA_NAME);                
 			}

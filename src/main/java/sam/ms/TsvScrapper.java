@@ -17,6 +17,7 @@ import java.util.concurrent.Callable;
 
 import sam.downloader.db.entities.meta.IDManga;
 import sam.ms.entities.Manga;
+import sam.ms.extras.Utils;
 import sam.ms.scrapper.Scrapper;
 import sam.ms.scrapper.Scraps;
 import sam.ms.scrapper.ScrapsListener;
@@ -51,7 +52,7 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 			Manga m = mangaList.get(mangaId.getInt(r));
 
 			if(m == null) {
-				m = new Manga(r, sam.manga.scrapper.Scrapper.urlColumn());
+				m = new Manga(Utils.MANGA_DIR, r, sam.manga.scrapper.Scrapper.urlColumn());
 				mangaList.add(m);
 			}
 			set.add(m);

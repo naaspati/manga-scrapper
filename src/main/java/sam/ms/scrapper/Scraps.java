@@ -14,7 +14,6 @@ import static sam.downloader.db.entities.meta.DStatus.SUCCESS;
 import static sam.myutils.Checker.isEmpty;
 
 import java.io.IOException;
-import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
@@ -22,14 +21,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Formatter;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,7 +34,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.DoublePredicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import javax.swing.JOptionPane;
 
 import sam.console.ANSI;
 import sam.downloader.db.entities.meta.DStatus;
@@ -54,6 +54,7 @@ import sam.ms.entities.Chapter;
 import sam.ms.entities.Manga;
 import sam.ms.entities.Page;
 import sam.ms.extras.Utils;
+import sam.myutils.Checker;
 import sam.myutils.System2;
 import sam.string.StringBuilder2;
 import sam.string.StringUtils;
@@ -65,6 +66,7 @@ public class Scraps implements Runnable {
 	private int mangaFailed, chapterFailed;
 	private String nextChapterFormat, finalProgressFormat;
 	private AtomicInteger failedPagesCount = new AtomicInteger(0);
+	private List<IDPage> failedPages = Collections.synchronizedList(new ArrayList<>(100));
 
 	// 1 -> manga.chaptersCount();
 	private final String nextChapFormatBase = green("  (%%s/%s) ")+yellow("Chapter: ")+"%%s %%s";
@@ -100,18 +102,17 @@ public class Scraps implements Runnable {
 		totalMangas = listener.totalCountOfManga();
 		System.out.println(ANSI.yellow("THREAD_COUNT: ")+THREAD_COUNT);
 
+		ScrapsListener2 lis = listener2(); 
 		try {
-			start2(listener2());
+			start2(lis);
 		} catch (InterruptedException e) {
 			System.err.println("STOPPING PROCESSS");
 			e.printStackTrace();
 			return;
 		}
-		retryFailedPages();
+		retryFailedPages(lis);
 	}
-
 	private void start2(ScrapsListener2 listener) throws InterruptedException {
-		Path saveRoot = listener.getSaveRootPath();
 		ExecutorService executorService = listener.executorService();
 
 		while(true) {
@@ -130,7 +131,6 @@ public class Scraps implements Runnable {
 			chapterProgress = 0;
 
 			totalProgress();
-			final Path mangaDir = listener.getMangaDir(manga, saveRoot);
 
 			for (IDChapter chapter : chapters) {
 				chapterProgress++;
@@ -138,17 +138,17 @@ public class Scraps implements Runnable {
 				System.out.printf(nextChapterFormat, chapterProgress, StringUtils.doubleToString(chapter.getNumber()), chapter.getTitle());
 				totalProgress();
 
-				Path chapterFolder = listener.getChapterFolder(manga, mangaDir, chapter);
-				List<IDPage> pages = listener.getPages(manga, chapter, chapterFolder);
+				
+				List<IDPage> pages = listener.getPages(manga, chapter);
 				if(pages.isEmpty()) continue;
 
 				CountDownLatch latch = new CountDownLatch(pages.size());
 				for (IDPage page : pages) 
-					executorService.execute(new DownloadTask(chapterFolder, page, latch));
+					executorService.execute(new DownloadTask(page, latch, listener.getSavePath(page)));
 
 				latch.await();
 
-				chapterFolder.toFile().delete();
+				listener.chapterPath(chapter).toFile().delete();
 				if(pages.stream().allMatch(p -> p.getStatus() == SUCCESS))
 					setSuccess(chapter);
 				else
@@ -165,6 +165,10 @@ public class Scraps implements Runnable {
 		totalProgress();
 	}
 
+	private void setFailed(Object c, String error, Throwable e) {
+		if(c instanceof ErrorSetter)
+			((ErrorSetter)c).setError(error, e, DStatus.FAILED);
+	}
 	private void setFailed(Object c, String error) {
 		if(c instanceof ErrorSetter)
 			((ErrorSetter)c).setError(error, DStatus.FAILED);
@@ -179,70 +183,84 @@ public class Scraps implements Runnable {
 	private class DownloadTask implements Runnable {
 		private final IDPage page;
 		private final CountDownLatch latch;
-		private final Path chapterFolder;
+		private final Path savePath;
 
-		public DownloadTask(Path chapterFolder, IDPage page, CountDownLatch latch) {
+		public DownloadTask(IDPage page, CountDownLatch latch, Path savePath) {
 			this.page = page;
 			this.latch = latch;
-			this.chapterFolder = chapterFolder;
+			this.savePath = savePath;
 		}
 
 		@Override
 		public void run() {
 			String order =  String.valueOf(page.getOrder());
 			String corder = order.concat(" ");
-			Path target = chapterFolder.resolve(order);
 
 			try {
-				downloadPage(target, page);
+				downloadPage(savePath, page);
 				System.out.print(corder);
 				setSuccess(page);
 			} catch (Exception e) {
 				System.out.print(red(corder));
 				if(page instanceof ErrorSetter)
 					((ErrorSetter)page).setFailed(null, e);
-				if(page instanceof Page)
-					((Page)page).setTarget(target);
 				failedPagesCount.incrementAndGet();
+				failedPages.add(page);
 			} finally {
 				latch.countDown();
 			}
 		}
 	}
 
-	private void retryFailedPages() {
-		throw new IllegalAccessError("not yes coded");
-		/** FIXME
-		 * 		if(failedPages == null || failedPages.isEmpty())
+	private void retryFailedPages(ScrapsListener2 listener) {
+		if(Checker.isEmpty(failedPages))
 			return;
+
+		IdentityHashMap<IDPage, Void> success = new IdentityHashMap<>();
+		save_cursor();
 
 		while(!failedPages.isEmpty() && JOptionPane.showConfirmDialog(null, "<html>try scrapping again?, <br>failed: "+failedPages.size()+" </html>") == JOptionPane.YES_OPTION) {
 			failedPages.stream()
-			.collect(Collectors.groupingBy(f -> f.getChapter().getManga()))
+			.collect(Collectors.groupingBy(f -> listener.getManga(listener.getChapter(f)), IdentityHashMap::new, Collectors.toList()))
 			.forEach((manga, chapters) -> {
+
 				System.out.print(cyan(manga.getMangaName())+(chapters.size() == 1 ? " " : "\n"));
+				int[] totPageFailed = {0}; 
+
 				chapters.stream()
-				.collect(Collectors.groupingBy(f -> f.chapter))
+				.collect(Collectors.groupingBy(f -> listener.getChapter(f), IdentityHashMap::new, Collectors.toList()))
 				.forEach((chapter, pages) -> {
 					System.out.print(yellow(chapter.getNumber()+" "+Utils.stringOf(chapter.getTitle()))+": ");
+					int failed = 0;
 
-					for (FailedPage f : pages) {
-						Page page = (Page) f.page;
+					for (IDPage page : pages) {
 						try {
-							downloadPage(f.target, page);
+							failed++;
+							downloadPage(listener.getSavePath(page), page);
 							System.out.print(page.getOrder()+" ");
-							failedPages.remove(f);
-							page.setSuccess();
+							failedPages.remove(page);
+							setSuccess(page);
+							success.put(page, null);
 						} catch (Exception e) {
+							setFailed(page, null, e); 
 							System.out.print(red(page.getOrder()+" "));
+							failed++;
 						}
 					}
+					if(failed == 0)
+						setSuccess(chapter);
+					else
+						totPageFailed[0] += failed; 
 					System.out.println();
 				});
+				if(totPageFailed[0] == 0)
+					setSuccess(manga);
 			});
+			failedPages.removeIf(success::containsKey);
+			success.clear();
 		}
-		 */
 	}
+
 	private void downloadPage(Path target, IDPage page) throws MalformedURLException, IOException, Exception {
 		downloadPage(scrapper, internetUtils, target, page);
 	}
@@ -253,32 +271,22 @@ public class Scraps implements Runnable {
 		internet_utils.download(new URL(s), target);
 	}
 
-	public static void saveFailedPages(Iterable<Manga> mangas) {
+	public static void saveFailedPages(List<IDPage> failedPages, ScrapsListener listener) {
 		Path failedPagesPath = Paths.get("failed-pages.tsv");
-		
-		Map<Integer, Set<Double>> command = new HashMap<>();
-		List<Page> failedPages = new ArrayList<>();
-		for (Manga manga : mangas) {
-			for (IDChapter chap : manga) {
-				for (IDPage page : chap) {
-					if(page.getStatus() != SUCCESS) {
-						failedPages.add((Page) page);
-						command.computeIfAbsent(manga.getMangaId(), i -> new HashSet<>()).add(chap.getNumber());
-					}
-				}
-			}
-		}
 
 		if(!failedPages.isEmpty()) {
 			Tsv tsv = new Tsv("path", "url", "page url", "status", "error");
 
-			for (Page fp : failedPages)
-				tsv.addRow(fp.getTarget().toString(), fp.getPageUrl(), fp.getImgUrl(), fp.getStatus() == null ? null : fp.getStatus().toString(), fp.getError());
-			
+			for (IDPage fp : failedPages) 
+				tsv.addRow(listener.getSavePath(fp).toString(), fp.getPageUrl(), fp.getImgUrl(), fp.getStatus() == null ? null : fp.getStatus().toString(), fp.getError());
+
 			StringBuilder sb = new StringBuilder();
-			command.forEach((s,t) -> {
-				sb.append(s).append(' ');
-				t.forEach(d -> sb.append(StringUtils.doubleToString(d)).append(' '));
+			failedPages.stream().filter(p -> p instanceof Page)
+			.map(p -> (Page)p)
+			.collect(Collectors.groupingBy(p -> p.getChapter().getManga(), IdentityHashMap::new, Collectors.toMap(p -> p.getChapter(), p -> null, (o, n) -> o, IdentityHashMap::new)))
+			.forEach((manga, chaps) -> {
+				sb.append(manga.getMangaId()).append(' ');
+				chaps.forEach((chap,NULL) -> sb.append(StringUtils.doubleToString(chap.getNumber())).append(' '));
 				sb.append(' ');
 			});
 
@@ -286,7 +294,8 @@ public class Scraps implements Runnable {
 				tsv.save(failedPagesPath);
 				System.out.println(green(failedPagesPath + "  created"));
 				System.out.println(red("failed manga-chaps: ")+sb);
-				StringWriter2.setText(failedPagesPath.resolveSibling("command.txt"), sb);
+				if(sb.length() != 0)
+					StringWriter2.setText(failedPagesPath.resolveSibling("failed-mangas-command.txt"), sb);
 			} catch (IOException e) {
 				System.out.println(red("failed to write: ")+failedPagesPath+"  error:"+e);
 			}
@@ -348,7 +357,6 @@ public class Scraps implements Runnable {
 
 	private ScrapsListener2 listener2() {
 		return new ScrapsListener2() {
-
 			@Override
 			public int totalCountOfManga() {
 				return listener.totalCountOfManga();
@@ -428,7 +436,7 @@ public class Scraps implements Runnable {
 				return chapters;
 			}
 			@Override
-			public List<IDPage> getPages(IDManga m, IDChapter c, Path chapterFolder) {
+			public List<IDPage> getPages(IDManga m, IDChapter c) {
 				Chapter chapter = (Chapter) c;
 
 				if(chapter.getStatus() == SUCCESS) {
@@ -465,6 +473,7 @@ public class Scraps implements Runnable {
 				}
 
 				System.out.print(cyan(" ("+pages.size()+") "));
+				Path chapterFolder = chapter.getPath();
 				chapter.setSourceTarget(chapterFolder);
 
 				String[] files = chapterFolder.toFile().list();
@@ -507,14 +516,6 @@ public class Scraps implements Runnable {
 				}
 				chapter.setSuccess();
 				return pages;
-			}
-			@Override
-			public Path getChapterFolder(IDManga manga, Path mangaDir, IDChapter chapter) {
-				return ((Chapter)chapter).dirPath(mangaDir, (Manga)manga);
-			}
-			@Override
-			public Path getMangaDir(IDManga manga, Path saveRoot) {
-				return ((Manga)manga).dirPath(saveRoot);
 			}
 		};
 	}

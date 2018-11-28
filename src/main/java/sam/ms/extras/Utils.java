@@ -5,10 +5,12 @@ import static sam.console.ANSI.red;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import sam.config.MyConfig;
 import sam.myutils.System2;
 
 public class Utils {
 	public static final Path APP_DATA = Paths.get(System2.lookup("APP_DATA"));
+	public static final Path MANGA_DIR = Paths.get(MyConfig.MANGA_DIR);
 	
     private Utils() {}
     

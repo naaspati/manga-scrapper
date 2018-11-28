@@ -19,19 +19,23 @@ public class Manga extends DMangaImpl {
 	private String _url;
 	private transient ChapterFilter filter;
 	private int limit = Integer.MAX_VALUE;
+	private final Path path;
 	
-	public Manga(ResultSet rs, String url) throws SQLException {
+	public Manga(Path mangaRoot, ResultSet rs, String url) throws SQLException {
 		super(rs.getInt(MANGA_ID), rs.getString(DIR_NAME), rs.getString(MANGA_NAME), url, null, null);
 		this._url = url;
+		this.path = mangaRoot.resolve(dir_name);
     }
-	public Manga(Row row, String urlColumn) {
+	public Manga(Path mangaRoot, Row row, String urlColumn) {
 		super(row.getInt(MANGA_ID), MangaUtils.toDirName(row.get(MANGA_NAME)), row.get(MANGA_NAME), row.get(urlColumn), null, null);
 		this._url = url;
+		this.path = mangaRoot.resolve(dir_name);
     }
 	
-	public Manga(int manga_id, String dir_name, String manga_name, String url, String error, DStatus status) {
+	public Manga(Path mangaRoot, int manga_id, String dir_name, String manga_name, String url, String error, DStatus status) {
 		super(manga_id, dir_name, manga_name, url, error, status);
 		this._url = url;
+		this.path = mangaRoot.resolve(dir_name);
 	}
 	@Override
 	public Chapter addChapter(IDChapter chapter) {
@@ -62,5 +66,8 @@ public class Manga extends DMangaImpl {
 	}
 	public int getLimit() {
 		return limit;
+	}
+	public Path getPath() {
+		return path;
 	}
 }

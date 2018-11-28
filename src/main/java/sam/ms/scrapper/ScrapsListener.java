@@ -1,14 +1,15 @@
 package sam.ms.scrapper;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Iterator;
 
-import sam.config.MyConfig;
 import sam.downloader.db.entities.meta.DStatus;
 import sam.downloader.db.entities.meta.IDChapter;
 import sam.downloader.db.entities.meta.IDManga;
+import sam.downloader.db.entities.meta.IDPage;
 import sam.manga.samrock.chapters.MinimalChapter;
+import sam.ms.entities.Chapter;
+import sam.ms.entities.Page;
 
 public interface ScrapsListener {
 	IDManga STOP_MANGA = new IDManga() {
@@ -30,13 +31,19 @@ public interface ScrapsListener {
 	 * @return
 	 */
 	IDManga nextManga();
-
-	Path MANGA_DIR = Paths.get(MyConfig.MANGA_DIR);
-
-	default Path getSaveRootPath() {
-		return MANGA_DIR;
-	}
 	int totalCountOfManga();
 	int remainingCountOfManga();
-
+	
+	default IDChapter getChapter(IDPage page) {
+		return ((Page)page).getChapter();
+	}
+	default IDManga getManga(IDChapter c) {
+		return ((Chapter)c).getManga();
+	}
+	default Path getSavePath(IDPage fp) {
+		return ((Page)fp).getChapter().getPath().resolve(String.valueOf(fp.getOrder()));
+	}
+	default Path chapterPath(IDChapter chapter) {
+		return ((Chapter)chapter).getPath();
+	}
 }

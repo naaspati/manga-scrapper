@@ -22,10 +22,4 @@ public class Page extends DPageImpl {
 	public Chapter getChapter() {
 		return (Chapter) super.getChapter();
 	}
-	public void setTarget(Path target) {
-		this.target = target;
-	}
-	public Path getTarget() {
-		return target;
-	}
 }
