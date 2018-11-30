@@ -146,7 +146,7 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 	}
 	@Override
 	public IDManga nextManga() {
-		Manga manga = mangas.removeFirst();
+		Manga manga = mangas.pollFirst();
 		return manga == null ? STOP_MANGA : manga;
 	}
 	@Override

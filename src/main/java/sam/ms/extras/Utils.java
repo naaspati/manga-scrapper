@@ -1,7 +1,5 @@
 package sam.ms.extras;
 
-import static sam.console.ANSI.red;
-
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -22,9 +20,6 @@ public class Utils {
 
     public static boolean isPrintFilter() {
         return printFilter;
-    }
-    public static String stringOf(String s) {
-        return s == null ? red("null") : s;
     }
 }
 

@@ -83,14 +83,14 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 				updated = false;
 				System.out.println(createBanner("Updated Mangas"));
 			}
-			return updateIds.removeFirst();
+			return updateIds.pollFirst();
 		}
 		if(!newIds.isEmpty()) {
 			if(nnew) {
 				nnew = false;
 				System.out.println(createBanner("New Mangas"));
 			}
-			return newIds.removeFirst();
+			return newIds.pollFirst();
 		}
 		return STOP_MANGA;
 	}

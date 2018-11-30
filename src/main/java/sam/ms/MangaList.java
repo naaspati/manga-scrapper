@@ -11,13 +11,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import sam.downloader.db.DownloaderDB;
-import sam.downloader.db.DownloaderDBFactory;
-import sam.downloader.db.entities.meta.DStatus;
-import sam.downloader.db.entities.meta.IDChapter;
-import sam.downloader.db.entities.meta.IDManga;
-import sam.ms.entities.Chapter;
 import sam.ms.entities.Manga;
-import sam.ms.entities.Page;
 
 public class MangaList implements Iterable<Manga> {
 

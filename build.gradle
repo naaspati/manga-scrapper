@@ -6,10 +6,10 @@ repositories {
 }
 
 dependencies {
-    //compile files('myutils.jar');
+    compile files('myutils.jar');
     compile 'org.json:json:20180130'
-    // compile fileTree(dir: '../Scrapper/build/libs', include:'*.jar')
-    // compile fileTree(dir: '../DownloaderDB/build/libs', include:'*.jar')
+    compile fileTree(dir: '../Scrapper/build/libs', include:'Scrapper*.jar')
+    compile fileTree(dir: '../DownloaderDB/build/libs', include:'DownloaderDB*.jar')
     compile group: 'org.xerial', name: 'sqlite-jdbc', version: '3.7.2'
     compile group: 'org.jsoup', name: 'jsoup', version: '1.10.3'
 }
@@ -21,7 +21,13 @@ targetCompatibility = JavaVersion.VERSION_1_8
 mainClassName = 'Main'
 ext.appdir = file(/D:\Core Files\Emulator\dolphin\Manga\Data\MangaFox_Scraper\app/)
 
-task install(type: Copy, dependsOn:installDist) {
+task deleteJars {
+  delete fileTree(appdir) {
+    include '*.jar'
+  }
+}
+
+task install(type: Copy, dependsOn:[installDist, deleteJars]) {
   def libdir = file(new File(installDist.destinationDir, 'lib')) 
   from libdir
   into appdir
