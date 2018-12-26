@@ -19,6 +19,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -105,6 +106,11 @@ public class Scraps implements Runnable {
 
 			List<IDChapter> chapters = listener.getChapters(manga);
 			if(chapters.isEmpty()) continue;
+			
+			try {
+				Collections.reverse(chapters);
+				chapters.sort(Comparator.comparingDouble(IDChapter::getNumber));
+			} catch (Exception e) {}
 
 			for (IDChapter chapter : chapters) {
 				out.nextChapter(chapter);

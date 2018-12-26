@@ -3,7 +3,6 @@ package sam.ms.scrapper;
 import static java.lang.System.arraycopy;
 import static java.lang.System.out;
 import static sam.console.ANSI.cyan;
-import static sam.console.ANSI.green;
 import static sam.console.ANSI.red;
 import static sam.console.ANSI.yellow;
 import static sam.console.VT100.erase_down;
@@ -19,20 +18,10 @@ import sam.downloader.db.entities.meta.IDPage;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
 import sam.myutils.Checker;
-import sam.string.BasicFormat;
 import sam.string.StringBuilder2;
 
 class ProgressPrint {
-	private final BasicFormat nextChapFormat = new BasicFormat(green("  ({}/{}) ")+yellow("Chapter: ")+"{} {}");
-	private final String indent = "     ";
-
-	private final BasicFormat aboutMangaFormat = new BasicFormat(new StringBuilder2()
-			.green("({}/{})").ln()
-			.append(indent).yellow("id: ").append("{}")
-			.yellow(",  name: ").append("{}").ln()
-			.append(indent).yellow("url: ").append("{}").ln()
-			.toString());  
-	private final BasicFormat chapterCountFormat = new BasicFormat(indent + ANSI.yellow("chap_count:")+" {}, "+ANSI.yellow("missing_count:")+" {}\n");
+	private final StringBuilder2 builder = new StringBuilder2();
 
 	public void setMangaCount(int mangaCount) {
 		total.mangaCount(mangaCount);
@@ -41,7 +30,7 @@ class ProgressPrint {
 	public void close() {
 		if(closed) return ;
 		closed = true;
-		
+
 		save_cursor();
 		erase();
 		out.print(total.charArray());
@@ -49,6 +38,10 @@ class ProgressPrint {
 	}
 
 	private TotalProgress total = new TotalProgress();
+	private final char[] PROGRESS = ANSI.yellow("\nprogress: ").toCharArray();
+	private final char[] ID = ANSI.yellow("id: ").toCharArray();
+	private final char[] NAME = ANSI.yellow(",  name: ").toCharArray();
+	private final char[] URL = ANSI.yellow("url: ").toCharArray();
 
 	public void nextManga(Manga manga) {
 		total.nextManga();
@@ -57,40 +50,83 @@ class ProgressPrint {
 		if(manga.getUrl() == null || manga.getDirName() == null){
 			total.mangaFailed();
 			out.println("\n"+red("FAILED Manga:  url == null || dir == null")+manga);
-		} else 
-			out.print(aboutMangaFormat.format(total.mangaProgress, total.mangaCount, manga.getMangaId(), stringOf(manga.getDirName()), stringOf(manga.getUrl())));
+		} else {
+
+			/**
+			 private final BasicFormat aboutMangaFormat = new BasicFormat(new StringBuilder2()
+			.green("({}/{})").ln()
+			.append(indent).yellow("id: ").append("{}")
+			.yellow(",  name: ").append("{}").ln()
+			.append(indent).yellow("url: ").append("{}").ln()
+			.toString());  
+
+			 */
+
+			/**
+			 * example
+			 * progress: 1/1
+			 * id: 615625,  name: Kyou Mei Machi
+			 * url: http://www.mangahere.cc/manga/kyou_mei_machi
+			 * 
+			 */
+			synchronized (builder) {
+				builder.setLength(0);
+				builder.append(PROGRESS).cyan(Integer.toString(total.mangaProgress)).append('/').append(toChars(total.mangaCount)).ln()
+				.append(ID).append(Integer.toString(manga.getMangaId())).append(NAME).append(manga.getMangaName()).ln()
+				.append(URL).append(manga.getUrl()).ln();
+				out.print(builder.toString());
+				builder.setLength(0);
+			}
+		} 
+
 
 		totalProgress();
 	}
+
+	private final char[] MANGA_FAILED_MSG = red("Chapter Scrapping Failed").toCharArray();
 
 	public void mangaFailed(String string, Exception e1, Object cause) {
 		total.mangaFailed();
-		
+
 		if(Utils.DEBUG) {
-			out.println(red("Chapter Scrapping Failed"));
+			out.println(MANGA_FAILED_MSG);
 			out.println(cause);
 			e1.printStackTrace(out);
-		} else
-			out.println(red("Chapter Scrapping Failed")+ exception(e1));
+		} else {
+			out.print(MANGA_FAILED_MSG);
+			out.println(exception(e1));
+		}
 		totalProgress();
 	}
 
+	private final char[] INDENT = "  ".toCharArray();
+	private final char[] SEPERATOR = ANSI.cyan(" | ").toCharArray();
+	
+	// private final BasicFormat nextChapFormat = new BasicFormat(green("  ({}/{}) ")+yellow("Chapter: ")+"{} {}");
+	
 	public void nextChapter(IDChapter c) {
-		total.chapterProgress();
-		out.print(nextChapFormat.format(toString(total.chapterProgress), toString(total.chapterCount), doubleToString(c.getNumber()), collase(c.getTitle())));
-		totalProgress();
+		
+		synchronized (builder) {
+			total.chapterProgress();
+			builder.append(INDENT).cyan(Integer.toString(total.chapterProgress)).append(SEPERATOR)
+			.append(dToString(c.getNumber())).append(' ');
+			String s = c.getTitle();
+			if(!Checker.isEmpty(s))
+				builder.append(s).append(' ');
+			
+			out.print(builder.toString());
+			
+			builder.setLength(0);
+			totalProgress();
+		}
 	}
 
-	private Object collase(String s) {
-		return s == null ? "" : s;
-	}
-
-	private String doubleToString(double number) {
+	private char[] dToString(double number) {
 		int n = (int)number;
-		if(number == n)
-			return toString(n);
-
-		return Double.toString(number);
+		if(n == number)
+			return toChars(n);
+		
+		return Double.toString(number).toCharArray();
 	}
 
 	private void erase() {
@@ -210,9 +246,23 @@ class ProgressPrint {
 		}
 	}
 
-	public void chapterCount(int total, int current) {
-		this.total.chapCount(current);
-		out.print(chapterCountFormat.format(total, current));
+	private final char[] CHAP_COUNT = ANSI.yellow("chap_count: ").toCharArray();
+	private final char[] MISSING_COUNT = ANSI.yellow(",  missing_count: ").toCharArray();
+	private final char[] CHAPTERS = ANSI.yellow(" chapters: ").toCharArray();
+
+	// private final BasicFormat chapterCountFormat = new BasicFormat(indent + ANSI.yellow("chap_count:")+" {}, "+ANSI.yellow("missing_count:")+" {}\n");
+
+	public void chapterCount(int total, int remaining) {
+		this.total.chapCount(remaining);
+		// chap_count: 23, missing_count: 16
+		synchronized (builder) {
+			builder.append(CHAP_COUNT).append(toChars(total)).append(MISSING_COUNT).append(toChars(remaining)).ln();
+			if(remaining != 0)
+				builder.append(CHAPTERS).ln();
+
+			out.print(builder.toString());	
+			builder.setLength(0);
+		}
 	}
 
 	public void temporary(String string) {
@@ -248,7 +298,7 @@ class ProgressPrint {
 	public void newLine() {
 		out.println();
 	}
-	
+
 	private static class Wrap {
 		private final char[] c1, c2, c3, prefix, suffix;
 		private final int prefixLen;
@@ -317,7 +367,7 @@ class ProgressPrint {
 		}	
 	}
 
-	
+
 	private final Wrap redNumber = new Wrap(ANSI::red, 2);
 
 	public void pageFailed(IDPage page) {
@@ -342,13 +392,13 @@ class ProgressPrint {
 	}
 
 	private final char[] n1 = {' ',' '}, n2 = {' ',' ',' '}, n3 = {' ',' ',' ',' '};
-	private char[] numberAndSpace(int order) {
-		if(order < 10) {
-			n1[0] = toChar(order); 
+	private char[] numberAndSpace(final int n) {
+		if(n < 10) {
+			n1[0] = toChar(n); 
 			return n1;
 		}
 
-		char[] c = toChars(order);
+		char[] c = toChars(n);
 		switch (c.length) {
 			case 2:
 				n2[0] = c[0];
@@ -365,8 +415,8 @@ class ProgressPrint {
 				return c;
 		}
 	}
-	private char toChar(int order) {
-		return (char) ('0' + order);
+	private char toChar(final int n) {
+		return (char) ('0' + n);
 	}
 
 	private final char[][] numbers = new char[100][];
@@ -375,14 +425,15 @@ class ProgressPrint {
 			numbers[i] = new char[]{i};
 	}
 
-	private char[] toChars(int order) {
-		char[] c = order >= numbers.length ? null : numbers[order];
-		if(c != null) return c;
+	private char[] toChars(final int n) {
+		char[] c = n >= numbers.length ? null : numbers[n];
+		if(c != null) 
+			return c;
 
-		c = toString(order).toCharArray();
-		
-		if(order < numbers.length) 
-			numbers[order] =  c;	
+		c = toString(n).toCharArray();
+
+		if(n < numbers.length) 
+			numbers[n] =  c;	
 
 		return c;
 	}
