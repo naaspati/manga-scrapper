@@ -100,7 +100,6 @@ class ProgressPrint {
 	}
 
 	private final char[] INDENT = "  ".toCharArray();
-	private final char[] SEPERATOR = ANSI.cyan(" | ").toCharArray();
 	
 	// private final BasicFormat nextChapFormat = new BasicFormat(green("  ({}/{}) ")+yellow("Chapter: ")+"{} {}");
 	
@@ -108,7 +107,7 @@ class ProgressPrint {
 		
 		synchronized (builder) {
 			total.chapterProgress();
-			builder.append(INDENT).cyan(Integer.toString(total.chapterProgress)).append(SEPERATOR)
+			builder.append(INDENT).append(chapProgress(total.chapterProgress))
 			.append(dToString(c.getNumber())).append(' ');
 			String s = c.getTitle();
 			if(!Checker.isEmpty(s))
@@ -119,6 +118,28 @@ class ProgressPrint {
 			builder.setLength(0);
 			totalProgress();
 		}
+	}
+
+	private char[][] chapterProgress = new char[100][];
+	
+	private char[] chapProgress(int n) {
+		if(n >= chapterProgress.length || n < 0)
+			return ANSI.cyan(n+" | ").toCharArray();
+		
+		char[] c = chapterProgress[n];
+		if(c != null) 
+			return c;
+		
+		String sp;
+		
+		if(n < 10)
+			sp = "  ";
+		else if(n < 100)
+			sp = " ";
+		else 
+			sp = "";
+		
+		return chapterProgress[n] = ANSI.cyan(sp+n+" | ").toCharArray();
 	}
 
 	private char[] dToString(double number) {
