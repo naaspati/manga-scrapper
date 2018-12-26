@@ -17,11 +17,12 @@ import sam.console.ANSI;
 import sam.downloader.db.entities.meta.IDChapter;
 import sam.downloader.db.entities.meta.IDPage;
 import sam.ms.entities.Manga;
+import sam.ms.extras.Utils;
+import sam.myutils.Checker;
 import sam.string.BasicFormat;
 import sam.string.StringBuilder2;
 
 class ProgressPrint {
-	// 1 -> manga.chaptersCount();
 	private final BasicFormat nextChapFormat = new BasicFormat(green("  ({}/{}) ")+yellow("Chapter: ")+"{} {}");
 	private final String indent = "     ";
 
@@ -62,16 +63,26 @@ class ProgressPrint {
 		totalProgress();
 	}
 
-	public void mangaFailed(String string, Exception e1) {
+	public void mangaFailed(String string, Exception e1, Object cause) {
 		total.mangaFailed();
-		out.println(red("Chapter Scrapping Failed")+ e1);
+		
+		if(Utils.DEBUG) {
+			out.println(red("Chapter Scrapping Failed"));
+			out.println(cause);
+			e1.printStackTrace(out);
+		} else
+			out.println(red("Chapter Scrapping Failed")+ exception(e1));
 		totalProgress();
 	}
 
 	public void nextChapter(IDChapter c) {
 		total.chapterProgress();
-		out.print(nextChapFormat.format(toString(total.chapterProgress), toString(total.chapterCount), doubleToString(c.getNumber()), c.getTitle()));
+		out.print(nextChapFormat.format(toString(total.chapterProgress), toString(total.chapterCount), doubleToString(c.getNumber()), collase(c.getTitle())));
 		totalProgress();
+	}
+
+	private Object collase(String s) {
+		return s == null ? "" : s;
 	}
 
 	private String doubleToString(double number) {
@@ -218,16 +229,25 @@ class ProgressPrint {
 		if(e == null)
 			out.println(red(string));
 		else
-			out.println(red(string)+e);
+			out.println(red(string)+exception(e));
 		totalProgress();
 	}
 
-	public void mangaFinish() {
-		erase();
-		out.println();
+	private String exception(Throwable e) {
+		if(e == null)
+			return "";
+		String msg = e.getMessage();
+		if(Checker.isEmpty(e.getMessage()))
+			return e.getClass().getSimpleName().concat("()");
+		if(msg.length() > 20)
+			return e.getClass().getSimpleName()+"("+msg.substring(0, 17)+"...)";
+		else
+			return e.getClass().getSimpleName()+"("+msg+")";
 	}
 
-	
+	public void newLine() {
+		out.println();
+	}
 	
 	private static class Wrap {
 		private final char[] c1, c2, c3, prefix, suffix;
@@ -377,9 +397,26 @@ class ProgressPrint {
 			return integerToString[n] = Integer.toString(n);
 		return s;
 	}
-	private final char[] COMPLETED  = ANSI.yellow(" COMPLETED").toCharArray(); 
-	public void chapterCompleted() {
-		out.println(COMPLETED);
+	private final char[] COMPLETED  = ANSI.yellow(" COMPLETED_ ").toCharArray();
+	private final int compltedIndex; 
+	{
+		int n = 0;
+		for (int i = 0; i < COMPLETED.length; i++) {
+			if(COMPLETED[i] == 'D' && COMPLETED[i+1] == '_') {
+				n = i+2;
+				break;
+			}
+		}
+		compltedIndex = n;
+	}
+	public void chapterCompleted(int n) {
+		if(n > 9)
+			throw new IllegalArgumentException(String.valueOf(n));
+		COMPLETED[compltedIndex] = (char) ('0'+n);
+		out.print(COMPLETED);
+		save_cursor();
+		erase();
+		out.println();
 	}
 	private final Wrap cyanWrap = new Wrap(s -> ANSI.cyan(" ("+s+") "), 1);
 	public void pageCount(int size) {

@@ -6,15 +6,13 @@ repositories {
 }
 
 dependencies {
-    compile files('myutils.jar');
+    compile files('myutils.jar', '../Scrapper/build/libs/Scrapper.jar', '../DownloaderDB/build/libs/DownloaderDB.jar');
     compile 'org.json:json:20180130'
-    compile fileTree(dir: '../Scrapper/build/libs', include:'Scrapper*.jar')
-    compile fileTree(dir: '../DownloaderDB/build/libs', include:'DownloaderDB*.jar')
     compile group: 'org.xerial', name: 'sqlite-jdbc', version: '3.7.2'
     compile group: 'org.jsoup', name: 'jsoup', version: '1.10.3'
 }
 
-version = 1.994
+version = 1.236
 sourceCompatibility = JavaVersion.VERSION_1_8 
 targetCompatibility = JavaVersion.VERSION_1_8
  

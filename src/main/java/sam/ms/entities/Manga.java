@@ -7,17 +7,18 @@ import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.function.DoublePredicate;
 
 import sam.downloader.db.entities.impl.DMangaImpl;
 import sam.downloader.db.entities.meta.DStatus;
 import sam.downloader.db.entities.meta.IDChapter;
-import sam.manga.samrock.mangas.MangaUtils;
+import sam.manga.samrock.Renamer;
 import sam.tsv.Row;
 
 public class Manga extends DMangaImpl {
 
 	private String _url;
-	private transient ChapterFilter filter;
+	private transient DoublePredicate filter;
 	private int limit = Integer.MAX_VALUE;
 	private final Path path;
 	
@@ -27,7 +28,7 @@ public class Manga extends DMangaImpl {
 		this.path = mangaRoot.resolve(dir_name);
     }
 	public Manga(Path mangaRoot, Row row, String urlColumn) {
-		super(row.getInt(MANGA_ID), MangaUtils.toDirName(row.get(MANGA_NAME)), row.get(MANGA_NAME), row.get(urlColumn), null, null);
+		super(row.getInt(MANGA_ID), Renamer.mangaDirName(row.get(MANGA_NAME)), row.get(MANGA_NAME), row.get(urlColumn), null, null);
 		this._url = url;
 		this.path = mangaRoot.resolve(dir_name);
     }
@@ -41,14 +42,10 @@ public class Manga extends DMangaImpl {
 	public Chapter addChapter(IDChapter chapter) {
 		return (Chapter) super.addChapter(chapter);
 	}
-
-    public void setFilter(ChapterFilter filter) {
-        Objects.requireNonNull(filter);
-        Objects.requireNonNull(filter.getTester());
-
-        this.filter = filter;
+    public void setFilter(DoublePredicate filter) {
+        this.filter = Objects.requireNonNull(filter);
     }
-    public ChapterFilter getFilter() {
+    public DoublePredicate getFilter() {
         return filter;
     }
 	public Path dirPath(Path mangaDir) {

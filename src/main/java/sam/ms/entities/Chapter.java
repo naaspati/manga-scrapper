@@ -4,13 +4,13 @@ import java.nio.file.Paths;
 
 import sam.downloader.db.entities.impl.DChapterImpl;
 import sam.downloader.db.entities.meta.DStatus;
-import sam.manga.samrock.chapters.ChapterUtils;
+import sam.manga.samrock.Renamer;
 
 public class Chapter extends DChapterImpl {
 	private final Path path;
 	
 	 {
-		 this.path = getManga().getPath().resolve(ChapterUtils.makeChapterFileName(getNumber(), getTitle(), manga.getMangaName()));
+		 this.path = getManga().getPath().resolve(Renamer.makeChapterFileName(getNumber(), getTitle(), manga.getMangaName()));
 	 }
 	public Chapter(Manga manga, double number, String title, String url, String volume) {
 		super(manga, number, title, url);
@@ -19,7 +19,6 @@ public class Chapter extends DChapterImpl {
 	
 	public Chapter(Manga manga, double number, String title, String volume, Object source, Object target, String url, String error, DStatus status) {
 		super(manga, number, title, volume, source, target, url, error, status);
-		
 	}
 	public int getHashId() { return getUrl().hashCode(); }
 	

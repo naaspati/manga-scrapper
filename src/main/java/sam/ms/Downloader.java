@@ -79,10 +79,10 @@ public class Downloader {
                         .filter(e -> e.getErrors() != null)
                         .reduce(sbb, (sb,error) -> sb.append("\n--------------------------\n").append(error).append('\n').append(error.getErrors()).append('\n'), StringBuilder::append).toString();
 
-                Files.write(Paths.get("errors.txt"), data.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                Utils.write(Paths.get("errors.txt"), data.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             }
             else
-                Files.deleteIfExists(Paths.get("errors.txt"));
+                Utils.deleteIfExists(Paths.get("errors.txt"));
         } catch (IOException e) {
             e.printStackTrace();
         }

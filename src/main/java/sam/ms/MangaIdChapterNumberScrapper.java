@@ -9,20 +9,19 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Function;
+import java.util.function.DoublePredicate;
+import java.util.stream.Collectors;
 
 import sam.downloader.db.entities.meta.IDManga;
-import sam.ms.entities.ChapterFilter;
+import sam.manga.samrock.chapters.ChapterFilterBase;
+import sam.manga.samrock.chapters.ChapterFilterUtils;
+import sam.manga.scrapper.scrappers.impl.ScrapperCached;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
-import sam.ms.scrapper.Scrapper;
 import sam.ms.scrapper.Scraps;
 import sam.ms.scrapper.ScrapsListener;
 
@@ -42,36 +41,48 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 			System.out.println(red("no data input"));
 			return;
 		}
-		final LinkedHashMap<Integer, ChapterFilter> chapterFilters = parseData(data);
+		final LinkedHashMap<Integer, Filter2> filters = parseData(data);
 
-		if(chapterFilters.isEmpty()){
+		if(filters.isEmpty()){
 			System.out.println(red("no manga id(s) found"));
 			return;
 		}
-		new FilterLoader().load(mangasList, Collections.unmodifiableMap(chapterFilters));
-		List<Integer> failed = new ArrayList<>();
-		chapterFilters.forEach((id, missings) -> {
+		
+		ScrapperCached scrapper = ScrapperCached.createDefaultInstance();
+		
+		Loader.load(
+				scrapper.urlColumn(),
+				mangasList,
+				filters.keySet().stream().filter(id -> mangasList.get(id) == null).collect(Collectors.toList()), 
+				filters.entrySet().stream().filter(e -> filter2(e.getValue()).predicate == null).map(e -> e.getKey()).collect(Collectors.toList())
+				);
+		
+		this.mangas = new LinkedList<>();
+		
+		filters.forEach((id, filter) -> {
 			Manga m = mangasList.get(id);
-
-			if(m == null){
-				System.out.println(red("no manga data with id: "+id));
-				failed.add(id);
-				return;
+			
+			if(filter2(filter).predicate == null) {
+				if(m.getFilter() == null)
+					m.setFilter(ChapterFilterUtils.ALL_ACCEPT_FILTER);
+			} else {
+				m.setFilter(filter);
 			}
+			
 			if(m.getDirName() == null || m.getUrl() == null){
 				System.out.println(red(m));
-				failed.add(id);
+			} else {
+				System.out.println(yellow(id + ", "+m.getDirName())+"\n   filter: "+filter);
+				mangas.add(m);
 			}
-			else
-				System.out.println(yellow(id + ", "+m.getDirName())+"\n   missings: "+(Utils.isPrintFilter() ? "" : missings));
 		});
-		
+
 		Path p1 = Utils.APP_DATA.resolve("-mc.log");
 		Path p2 = Utils.APP_DATA.resolve("last-mc");
 
 		if(Files.exists(p1)) {
 			StringBuilder sb = new StringBuilder();
-			chapterFilters.forEach((id, missings) -> sb.append(" ").append(id).append("  ").append(missings));
+			mangas.forEach(manga -> sb.append(" ").append(manga.getMangaId()).append("  ").append(manga.getFilter()));
 			sb.append('\n');
 
 			byte[] b1 = sb.toString().getBytes();
@@ -95,54 +106,35 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 				System.out.println(yellow("-mc.log saved"));
 			}
 		}
-		if(!failed.isEmpty()){
-			System.out.println(red("\n\nbad data -> ")+failed);
-			chapterFilters.keySet().removeAll(failed);
-			if(chapterFilters.isEmpty()) {
-				System.out.println(red("ALL Bad Data"));
-				return;
-			}
-		}
-		this.mangas =  new LinkedList<>();
-		chapterFilters.forEach((id,missings) -> mangas.add(Objects.requireNonNull(mangasList.get(id))));
 		
 		this.manga_size = mangas.size();
-		Scraps scraps = new Scraps(scrapper(), this);
+		Scraps scraps = new Scraps(scrapper, this);
 		scraps.run();
 	}
-	private Scrapper scrapper0;
-	public Scrapper scrapper() {
-		if(scrapper0 == null) {
-			try {
-				scrapper0 = new Scrapper();
-			} catch (IOException e) {
-				throw new RuntimeException(e);
-			}
-		}
-		return scrapper0;
+	private Filter2 filter2(Object value) {
+		return (Filter2)value;
 	}
-	
-	private LinkedHashMap<Integer, ChapterFilter> parseData(List<String> data) {
-		LinkedHashMap<Integer, ChapterFilter> map = new LinkedHashMap<>();
-		
-		ChapterFilter current = null;
-		Function<Integer, ChapterFilter> computer = i -> new ChapterFilter(i);
+	private LinkedHashMap<Integer, Filter2> parseData(List<String> data) {
+		LinkedHashMap<Integer, Filter2> filters = new LinkedHashMap<>();
+
+		Filter2 current = null;
 
 		if(data.size() == 1) {
 			int id = Integer.parseInt(data.get(0));
-			map.put(id, new ChapterFilter(id));
+			filters.put(id, new Filter2(id));
 		} else {
 			for (String s : data) {
 				if(s.indexOf('_') < 0 && 
 						s.indexOf('-') < 0 && 
 						s.indexOf('.') < 0 && 
 						s.length() > 3){
-					current = map.computeIfAbsent(Integer.parseInt(s), computer);
+					current = filters.computeIfAbsent(Integer.parseInt(s), Filter2::new);
 				} else if(current != null)
 					current.add(s);
 			}
 		}
-		return map;
+		filters.forEach((s,t) -> t.setCompleted());
+		return filters;
 	}
 	@Override
 	public IDManga nextManga() {
@@ -157,4 +149,67 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 	public int remainingCountOfManga() {
 		return mangas.size();
 	}
+	private static class Filter2 extends ChapterFilterBase {
+		private DoublePredicate predicate;
+
+		public Filter2(int manga_id) {
+			super(manga_id, "Matches");
+		}
+		public void add(String s) {
+			check();
+
+			DoublePredicate dp = make(s);
+			predicate = predicate == null ? dp : predicate.or(dp);
+
+			if(_sb == null)
+				_sb = new StringBuilder("[");
+
+			_sb.append(s).append(separator);
+		}
+		
+		@Override
+		public boolean test(double value) {
+			if(!complete)
+				throw new IllegalStateException("not completed");
+
+			return predicate.test(value);
+		}
+
+		private DoublePredicate make(String s) {
+			int index1 = s.indexOf('-');
+			int index2 = s.indexOf('_');
+
+			if(index1 < 0 && index2 < 0){
+				double r = parse(s); 
+				return (d -> d == r);
+			}
+
+			if(index1 == 0 || index2 == 0){
+				double r = parse(s.substring(1));
+
+				return  index1 == 0 
+						? (d -> d <= r) 
+								: (d -> d < r);
+			}
+			else if(index1 == s.length() - 1 || index2 == s.length() - 1){
+				double r = parse(s.substring(0, s.length() - 1));
+
+				return index1 == s.length() - 1  
+						? (d -> d >= r) 
+								: (d -> d > r);
+			}
+			else{
+				double n1 = parse(s.substring(0, index1 > 0 ? index1 : index2));
+				double n2 = parse(s.substring((index1 > 0 ? index1 : index2) + 1, s.length()));
+
+				return index1 > 0 
+						? (d -> n1 <= d && d <= n2)
+								: (d -> n1 < d && d < n2);
+			}
+		}
+		private double parse(String s) {
+			return Double.parseDouble(s);
+		}
+	}
+
 }

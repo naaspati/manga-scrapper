@@ -11,14 +11,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.SQLException;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.LinkedList;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 
 import sam.downloader.db.entities.meta.IDManga;
+import sam.manga.scrapper.scrappers.impl.ScrapperCached;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
-import sam.ms.scrapper.Scrapper;
 import sam.ms.scrapper.Scraps;
 import sam.ms.scrapper.ScrapsListener;
 import sam.tsv.Column;
@@ -28,21 +29,23 @@ import sam.tsv.Tsv;
 
 public class TsvScrapper implements ScrapsListener, Callable<Void> {
 	private final MangaList mangaList;
-	private LinkedList<Manga> updateIds, newIds;
+	private final LinkedList<Integer> ids = new LinkedList<>();
 	private final int limit;
+	private Integer firstNewManga;
+	private final ScrapperCached scrapper;
+	
 
 	public TsvScrapper(MangaList mangaList, int limit) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
 		this.mangaList = mangaList;
 		this.limit = limit;
+		this.scrapper = ScrapperCached.createDefaultInstance(); 
 	}
 
-	private LinkedList<Manga> read(String msg, String tsvFile) throws IOException {
-		LinkedList<Manga> set = new LinkedList<>();
-
+	private void read(String msg, String tsvFile) throws IOException {
 		Path p = Paths.get(tsvFile);
 		if(Files.notExists(p)) {
 			System.out.println(red(msg+": not found: ")+tsvFile);
-			return set;
+			return;
 		}
 		Tsv tsv = Tsv.parse(p);
 		Column limit = tsv.getColumnIfPresent("limit");
@@ -52,14 +55,15 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 			Manga m = mangaList.get(mangaId.getInt(r));
 
 			if(m == null) {
-				m = new Manga(Utils.MANGA_DIR, r, sam.manga.scrapper.Scrapper.urlColumn());
+				m = new Manga(Utils.MANGA_DIR, r, scrapper.urlColumn());
 				mangaList.add(m);
 			}
-			set.add(m);
+
+			ids.add(m.getMangaId());
+
 			if(limit !=  null)
 				m.setLimit(limit(limit.get(r)));
 		}
-		return set;
 	}
 
 	private int limit(String s) {
@@ -73,26 +77,21 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 		return Integer.MAX_VALUE;
 	}
 
-	private boolean updated = true, nnew = true;
 	private int totalCount;
 
 	@Override
 	public IDManga nextManga() {
-		if(!updateIds.isEmpty()) {
-			if(updated) {
-				updated = false;
-				System.out.println(createBanner("Updated Mangas"));
-			}
-			return updateIds.pollFirst();
-		}
-		if(!newIds.isEmpty()) {
-			if(nnew) {
-				nnew = false;
-				System.out.println(createBanner("New Mangas"));
-			}
-			return newIds.pollFirst();
-		}
-		return STOP_MANGA;
+		Integer id = ids.pollFirst();
+		
+		if(id == null)
+			return STOP_MANGA;
+		
+		if(ids.size() == totalCount)
+			System.out.println(createBanner("Updated Mangas"));
+		if(id.equals(firstNewManga))
+			System.out.println(createBanner("New Mangas"));
+		
+		return Objects.requireNonNull(mangaList.get(id));
 	}
 
 	@Override
@@ -101,22 +100,26 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 	}
 	@Override
 	public int remainingCountOfManga() {
-		return updateIds.size()+newIds.size();
+		return ids.size();
 	}
 	
-
 	@Override
 	public Void call() throws Exception {
-		this.updateIds = read("Updated Mangas Tsv", UPDATED_MANGAS_TSV_FILE);
-		this.newIds = read("New Mangas Tsv", NEW_MANGAS_TSV_FILE);
+		read("Updated Mangas Tsv", UPDATED_MANGAS_TSV_FILE);
 
-
-		if(updateIds.isEmpty())
+		if(ids.isEmpty())
 			System.out.println(red("no updates"));
-		if(newIds.isEmpty())
-			System.out.println(red("no new mangas"));
 
-		if(newIds.isEmpty() && updateIds.isEmpty())
+		int size = ids.size();
+
+		read("New Mangas Tsv", NEW_MANGAS_TSV_FILE);
+
+		if(ids.size() == size)
+			System.out.println(red("no new mangas"));
+		else
+			firstNewManga = ids.get(size);
+
+		if(ids.isEmpty())
 			System.out.println(yellow("No Data to extract"));
 
 		mangaList.forEach(m -> {
@@ -124,10 +127,18 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 				m.setLimit(limit);
 		});
 
-		this.totalCount = updateIds.size()+ newIds.size();
-		
-		new FilterLoader().load(mangaList, new HashMap<>());
-		new Scraps(new Scrapper(), this).run();
+		this.totalCount = ids.size();
+		Loader.load(scrapper.urlColumn(), mangaList, Collections.emptyList(), ids);
+
+		if(Utils.debug() || Utils.dryRun()) {
+			ids.forEach(id -> {
+				Manga m = mangaList.get(id);
+				System.out.println(yellow(id + ", "+m.getDirName())+"\n   filter: "+(m.getFilter() == null ? "[ALL]" : m.getFilter()));
+			});
+			System.out.println("\n\n");
+		}
+
+		new Scraps(scrapper, this).run();
 		return null;	
 	}
 }

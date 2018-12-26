@@ -2,13 +2,12 @@
 import static sam.console.ANSI.red;
 import static sam.console.ANSI.yellow;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import sam.ms.Downloader;
-import sam.ms.extras.Utils;
 
 /**
  * 
@@ -19,38 +18,45 @@ import sam.ms.extras.Utils;
  *
  */
 public class Main {
-	public static final double VERSION = Double.parseDouble(System.getenv("APP_VERSION"));
-	
-    public static void main(String[] args) throws Exception {
-
-        if(args.length == 0){
-            System.out.println(red("Invalid using of command: zero number of commands\n"));
+    public static void main(String[] args0) throws Exception {
+    	List<String> args = args0.length == 0 ? Collections.emptyList() : new ArrayList<>(Arrays.asList(args0));
+    	
+    	if(args.isEmpty())
+    		System.out.println(red("Invalid using of command: zero number of commands\n"));
+    	
+        if(args.isEmpty() || has(args, "-h", "--help")) {
             CMD.showHelp();
-            return;
-        }
-
-        CMD.testAgainst = args[0];
-
-        if(CMD.HELP.test()){
-            CMD.showHelp();
-            return;
-        }
-        if(CMD.VERSION.test()){
-            System.out.println(yellow("version: "+VERSION+"\n\n"));
-            return;
+            System.exit(0);
         }
         
-        List<String> argsList = Stream.of(args).skip(1).collect(Collectors.toList());
-        Utils.setPrintFilter(argsList.remove("--print-filter"));
+        if(has(args, "-v", "--version")){
+            System.out.println(yellow("version: "+Double.parseDouble(System.getenv("APP_VERSION"))+"\n\n"));
+            System.exit(0);
+        }
+        
+        if(args.remove("--dry-run"))
+        	System.setProperty("DRY_RUN", "true");
+        if(args.remove("--debug"))
+        	System.setProperty("DEBUG", "true");
+
+        CMD.testAgainst = args.remove(0);
         
         if(CMD.TSV.test())
-        	new Downloader().tsv(argsList);
+        	new Downloader().tsv(args);
         else if(CMD.MCHAP.test())
-        	new Downloader().mchap(argsList);
+        	new Downloader().mchap(args);
         else {
-        	System.out.println(red("failed to recognize command: ")+Arrays.toString(args));
+        	System.out.println(red("failed to recognize command: ")+args);
             CMD.showHelp();
         }
     }
+
+	private static boolean has(List<String> args, String...find) {
+		boolean b = false;
+		for (String s : find) 
+			b = args.remove(s) || b;
+		
+		return b;
+	}
 }
 
