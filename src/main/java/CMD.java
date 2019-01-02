@@ -5,6 +5,7 @@ import java.util.Formatter;
 enum CMD {
     HELP("-h", "--help", ""),
     VERSION("-v", "--version", ""),
+    FORMAT("--format", null, "format download"),
     MCHAP("-mc", "--mchap", "extract and download chapters using manga-chapters pair(s)"),
     URL("-u", "--url", "extract scrap and download using url, (range can be supplied of chapter)"),
     TSV("-t", "--tsv", "extract for data in updatedManga.tsv, newManga.tsv "),
