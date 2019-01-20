@@ -20,8 +20,11 @@ mainClassName = 'Main'
 ext.appdir = file(/D:\Core Files\Emulator\dolphin\Manga\Data\MangaFox_Scraper\app/)
 
 task deleteJars {
-  delete fileTree(appdir) {
-    include '*.jar'
+  doLast {
+     file(appdir).listFiles().each({
+       if(it.name.endsWith('.jar'))
+         it.delete();
+     });
   }
 }
 

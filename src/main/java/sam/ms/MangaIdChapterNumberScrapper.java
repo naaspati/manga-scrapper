@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 import sam.downloader.db.entities.meta.IDManga;
 import sam.manga.samrock.chapters.ChapterFilterBase;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
+import sam.manga.scrapper.ScrapperException;
 import sam.manga.scrapper.scrappers.impl.ScrapperCached;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
@@ -36,7 +37,7 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 		this.mangasList = mangas;
 		this.data = data;
 	}
-	public void start() throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException {
+	public void start() throws IOException, InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException, ScrapperException {
 		if(data.isEmpty()){
 			System.out.println(red("no data input"));
 			return;
@@ -153,18 +154,14 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 		private DoublePredicate predicate;
 
 		public Filter2(int manga_id) {
-			super(manga_id, "Matches");
+			super(manga_id);
 		}
 		public void add(String s) {
 			check();
 
 			DoublePredicate dp = make(s);
 			predicate = predicate == null ? dp : predicate.or(dp);
-
-			if(_sb == null)
-				_sb = new StringBuilder("[");
-
-			_sb.append(s).append(separator);
+			append(s);
 		}
 		
 		@Override

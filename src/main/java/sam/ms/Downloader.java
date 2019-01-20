@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import sam.manga.scrapper.ScrapperException;
 import sam.swing.SwingClipboard;
 
 public class Downloader {
@@ -35,7 +36,7 @@ public class Downloader {
 		return MangaList.createInstance();
 	}
 
-	public void mchap(List<String> args) throws InstantiationException, IllegalAccessException, ClassNotFoundException, IOException, SQLException {
+	public void mchap(List<String> args) throws InstantiationException, IllegalAccessException, ClassNotFoundException, IOException, SQLException, ScrapperException {
 		if(args.isEmpty())
             System.out.println(red("invalid count of commands: ")+args.toString());
         else{

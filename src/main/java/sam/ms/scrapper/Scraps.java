@@ -30,6 +30,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.DoublePredicate;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -44,10 +45,12 @@ import sam.downloader.db.entities.meta.IDPage;
 import sam.internetutils.InternetUtils;
 import sam.io.serilizers.StringWriter2;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
-import sam.manga.scrapper.ChapterScrapListener;
-import sam.manga.scrapper.PageScrapListener;
+import sam.manga.scrapper.FailedChapter;
+import sam.manga.scrapper.ScrappedChapter;
 import sam.manga.scrapper.ScrappedManga;
+import sam.manga.scrapper.ScrappedPage;
 import sam.manga.scrapper.Scrapper;
+import sam.manga.scrapper.ScrapperException;
 import sam.ms.entities.Chapter;
 import sam.ms.entities.Manga;
 import sam.ms.entities.Page;
@@ -59,6 +62,7 @@ import sam.string.StringUtils;
 import sam.tsv.Tsv;
 
 public class Scraps implements Runnable {
+
 	private final Scrapper scrapper;
 	private List<IDPage> failedPages = Collections.synchronizedList(new ArrayList<>(100));
 	private List<IDChapter> failedChapters = Collections.synchronizedList(new ArrayList<>(100));
@@ -105,17 +109,12 @@ public class Scraps implements Runnable {
 				break;
 
 			List<IDChapter> chapters = listener.getChapters(manga);
-			if(chapters.isEmpty()) continue;
-			
-			try {
-				Collections.reverse(chapters);
-				chapters.sort(Comparator.comparingDouble(IDChapter::getNumber));
-			} catch (Exception e) {}
+			if(Checker.isEmpty(chapters)) continue;
 
 			for (IDChapter chapter : chapters) {
 				out.nextChapter(chapter);
 				List<IDPage> pages = listener.getPages(manga, chapter);
-				if(pages.isEmpty()) continue;
+				if(Checker.isEmpty(pages)) continue;
 
 				if(Utils.dryRun()){
 					for (IDPage p : pages)
@@ -123,9 +122,41 @@ public class Scraps implements Runnable {
 					continue;
 				}
 
-				CountDownLatch latch = new CountDownLatch(pages.size());
-				for (IDPage page : pages) 
-					executorService.execute(new DownloadTask(page, latch, listener.getSavePath(page)));
+				int size = pages.size();
+				CountDownLatch latch = new CountDownLatch(size);
+				Collections.sort(pages, Comparator.comparingInt(IDPage::getOrder));
+
+				for (int i = 0; i < size; i++) {
+					IDPage page = pages.get(i);
+
+					if(page.getImgUrl() == null) {
+						try{
+							setImageUrl(scrapper, i, pages);	
+						} catch (ScrapperException| IOException e) {
+							out.pageFailed(page);
+							failedPages.add(page);
+							setError(page, e);
+						}
+					}
+
+					if(page.getImgUrl() == null) {
+						latch.countDown();
+						continue;
+					}
+					executorService.execute(() -> {
+						Path target = listener.getSavePath(page);
+						
+						try {
+							downloadPage(target, page);
+							out.pageSuccess(page);
+						} catch (IOException e) {
+							out.pageFailed(page);
+							failedPages.add(page);
+						} finally {
+							latch.countDown();
+						}
+					});
+				}
 
 				latch.await();
 
@@ -148,11 +179,28 @@ public class Scraps implements Runnable {
 		if(out != null)
 			out.close();
 	}
+	
+	// ..\Scrapper\src\test\java\MangaTest.java#setImageUrl
+	public static void setImageUrl(Scrapper scrapper, int index, List<IDPage> pages) throws ScrapperException, IOException {
+		IDPage page = pages.get(index);
 
-	private void setFailed(Object c, String error, Throwable e) {
-		if(c instanceof ErrorSetter)
-			((ErrorSetter)c).setError(error, e, DStatus.FAILED);
+		String[] st = scrapper.getPageImageUrl(page.getPageUrl());
+		if(Checker.isEmpty(st))
+			return;
+
+		int order = page.getOrder();
+		for (String s : st) {
+			int n = index++;
+			int o = order++;
+
+			if(n >= pages.size())
+				return;
+
+			if(pages.get(n).getOrder() == o)
+				pages.get(n).setImgUrl(s);
+		}
 	}
+	
 	private void setFailed(Object c, String error) {
 		if(c instanceof ErrorSetter)
 			((ErrorSetter)c).setError(error, DStatus.FAILED);
@@ -160,33 +208,6 @@ public class Scraps implements Runnable {
 	private void setSuccess(Object c) {
 		if(c instanceof ErrorSetter)
 			((ErrorSetter)c).setSuccess();
-	}
-	private class DownloadTask implements Runnable {
-		private final IDPage page;
-		private final CountDownLatch latch;
-		private final Path savePath;
-
-		public DownloadTask(IDPage page, CountDownLatch latch, Path savePath) {
-			this.page = page;
-			this.latch = latch;
-			this.savePath = savePath;
-		}
-
-		@Override
-		public void run() {
-			try {
-				downloadPage(savePath, page);
-				out.pageSuccess(page);
-				setSuccess(page);
-			} catch (Exception e) {
-				if(page instanceof ErrorSetter)
-					((ErrorSetter)page).setFailed(null, e);
-				out.pageFailed(page);
-				failedPages.add(page);
-			} finally {
-				latch.countDown();
-			}
-		}
 	}
 
 	private void retryFailedPages(ScrapsListener2 listener) {
@@ -210,16 +231,16 @@ public class Scraps implements Runnable {
 					System.out.print(yellow(chapter.getNumber()+" "+ProgressPrint.stringOf(chapter.getTitle()))+": ");
 					int failed = 0;
 
+					pages.forEach(p -> p.setImgUrl(null));
+
 					for (IDPage page : pages) {
 						try {
 							failed++;
 							downloadPage(listener.getSavePath(page), page);
 							System.out.print(page.getOrder()+" ");
 							failedPages.remove(page);
-							setSuccess(page);
 							success.put(page, null);
-						} catch (Exception e) {
-							setFailed(page, null, e); 
+						} catch (IOException e) {
 							System.out.print(red(page.getOrder()+" "));
 							failed++;
 						}
@@ -237,25 +258,25 @@ public class Scraps implements Runnable {
 			success.clear();
 		}
 	}
-
-	private void downloadPage(Path target, IDPage page) throws MalformedURLException, IOException, Exception {
-		InternetUtils u = internetUtils.poll();
+	public void setError(Object page, Exception e) {
+		if(page instanceof ErrorSetter)
+			((ErrorSetter)page).setFailed(null, e);
+	}
+	private void downloadPage(Path target, IDPage page) throws IOException {
+		InternetUtils internet = internetUtils.poll();
 		try {
-			downloadPage(scrapper, u, target, page);
+			downloadPage(page.getImgUrl(), internet, target);
+			setSuccess(page);
+		} catch (IOException e) {
+			setError(page, e);
+			throw e;
 		} finally {
-			internetUtils.offer(u);
+			internetUtils.offer(internet);
 		}
 	}
-	public static void downloadPage(Scrapper scrapper, InternetUtils internet_utils, Path target, IDPage page) throws MalformedURLException, IOException, Exception {
-		String s = page.getImgUrl();
-		if(s == null) {
-			s = scrapper.getPageImageUrl(page.getPageUrl());
-			if(page instanceof Page)
-				((Page)page).setImgUrl(s);
-		}
-		Files.move(internet_utils.download(s), target, StandardCopyOption.REPLACE_EXISTING);
+	public static void downloadPage(String url, InternetUtils internet_utils, Path target) throws MalformedURLException, IOException {
+		Files.move(internet_utils.download(url), target, StandardCopyOption.REPLACE_EXISTING);
 	}
-
 	private void saveFailed(ScrapsListener2 listener) {
 		Path failedPagesPath = Paths.get("failed-pages.tsv");
 
@@ -294,10 +315,23 @@ public class Scraps implements Runnable {
 		if(failedChapters.isEmpty())
 			delete(failedChapterPath);
 		else {
-			Tsv tsv = new Tsv("number", "title", "url", "source", "error");
-			for (IDChapter c : failedChapters) {
-				tsv.addRow(String.valueOf(c.getNumber()), c.getTitle(), c.getUrl(), c.getSource() == null ? "" : c.getSource().toString(), c.getError());
-			}
+			StringBuilder sb = new StringBuilder();
+			Function<IDChapter, String> failedPages = ch -> {
+				if(ch == null)
+					return "";
+
+				sb.setLength(0);
+				for (IDPage p : ch) {
+					if(p.getStatus() != DStatus.SUCCESS)
+						sb.append(p.getOrder()).append(' ');
+				}
+				return sb.toString();
+			};
+
+			Tsv tsv = new Tsv("number", "title", "url", "source","pages", "error");
+			for (IDChapter c : failedChapters) 
+				tsv.addRow(String.valueOf(c.getNumber()), c.getTitle(), c.getUrl(), c.getSource() == null ? "" : c.getSource().toString(), failedPages.apply(c), c.getError());
+
 			try {
 				tsv.save(failedChapterPath);
 				System.out.println(yellow("created: ")+failedChapterPath);
@@ -312,29 +346,6 @@ public class Scraps implements Runnable {
 			Utils.deleteIfExists(path);
 		} catch (IOException e) {
 			System.out.println(red("deleting failed: ")+path +"  error:"+e);
-		}
-	}
-	private class ChapterScrapListen implements ChapterScrapListener {
-		private int chapCount = 0;
-		private final Manga manga ; 
-
-		public ChapterScrapListen(Manga manga) {
-			this.manga = manga;
-		}
-		@Override 
-		public void onChapterSuccess(double number, String volume, String title, String url) {
-			IDChapter c = manga.findChapter(url);
-			if(c == null)
-				manga.addChapter(new Chapter(manga, number, title, url, volume));
-			chapCount++;
-		}
-		@Override
-		public void onChapterFailed(String msg, Throwable e, String number, String volume, String title,
-				String url) {
-			Chapter c = manga.addChapter(new Chapter(manga, -1, title, url, volume));
-			c.setFailed(msg, e);
-			out.chapterFailed(msg, e);
-			failedChapters.add(c);
 		}
 	}
 
@@ -375,17 +386,38 @@ public class Scraps implements Runnable {
 			@Override
 			public List<IDChapter> getChapters(IDManga m) {
 				Manga manga = (Manga) m;
-				int chapCount = 0;
+				int chapCount;
 				try {
 					ScrappedManga sm = scrapper.scrapManga(manga.getUrl());
-					ChapterScrapListen scl = new ChapterScrapListen(manga); 
-					sm.getChapters(scl);
-					chapCount = scl.chapCount;
-				} catch (Exception e1) {
+					ScrappedChapter[] chaps = sm.getChapters();
+
+					int count = 0;
+					for (ScrappedChapter sc : chaps) {
+						if(sc instanceof FailedChapter) {
+							FailedChapter f = (FailedChapter) sc;
+							Chapter c = manga.addChapter(new Chapter(manga, -1, sc.getTitle(), sc.getUrl(), sc.getVolume()));
+							String s = f.toString();
+							c.setFailed(s, f.getException());
+							out.chapterFailed(s, f.getException());
+							failedChapters.add(c);
+						} else {
+							IDChapter c = manga.findChapter(sc.getUrl());
+							if(c == null) {
+								c = new Chapter(manga, sc.getNumber(), sc.getTitle(), sc.getUrl(), sc.getVolume());
+								manga.addChapter(c);
+							}
+							if(Utils.DEBUG)
+								System.out.println("chapter scrapped: "+c.getNumber()+"  "+c.getTitle());
+							count++;
+						}
+					}
+					chapCount = count;
+				} catch (IOException | ScrapperException e1) {
 					out.mangaFailed("Chapter Scrapping Failed", e1, manga);
 					manga.setFailed("Chapter Scrapping Failed", e1);
 					return emptyList();
 				}
+
 				if(chapCount == 0){
 					out.chapterFailed("  no chapters extracted", null);
 					manga.setError("NO_CHAPTERS_SCRAPPED", null, FAILED);
@@ -425,20 +457,18 @@ public class Scraps implements Runnable {
 				}
 				 */
 
-
 				out.temporary("  -> extracting pages");
 
 				try {
-					scrapper.scrapPages(chapter.getUrl(), new PageScrapListener() {
-						public void onPageSuccess(String chapterUrl, int order, String pageUrl, String imgUrl) {
-							IDPage p = chapter.findPage(pageUrl);
-							if(p == null)
-								chapter.addPage(p = new Page(chapter, order, pageUrl));
+					ScrappedPage[] pages = scrapper.scrapPages(chapter.getUrl());
+					for (ScrappedPage sp : pages) {
+						IDPage p = chapter.findPage(sp.getPageUrl());
+						if(p == null)
+							chapter.addPage(p = new Page(chapter, sp.getOrder(), sp.getPageUrl()));
 
-							if(imgUrl != null)
-								((Page)p).setImgUrl(imgUrl);
-						};
-					});
+						if(sp.getImgUrl() != null)
+							((Page)p).setImgUrl(sp.getImgUrl());
+					}
 				} catch (Exception e) {
 					out.undoTemporary();
 					out.chapterFailed(" pages extracting failed: ", e);
@@ -515,7 +545,4 @@ public class Scraps implements Runnable {
 			}
 		};
 	}
-
-
-
 }

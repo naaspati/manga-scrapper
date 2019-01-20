@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 
 import sam.downloader.db.entities.meta.IDManga;
+import sam.manga.scrapper.ScrapperException;
 import sam.manga.scrapper.scrappers.impl.ScrapperCached;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
@@ -35,7 +36,7 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 	private final ScrapperCached scrapper;
 	
 
-	public TsvScrapper(MangaList mangaList, int limit) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException {
+	public TsvScrapper(MangaList mangaList, int limit) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException, ScrapperException {
 		this.mangaList = mangaList;
 		this.limit = limit;
 		this.scrapper = ScrapperCached.createDefaultInstance(); 
