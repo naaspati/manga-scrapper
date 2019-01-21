@@ -114,7 +114,8 @@ public class Scraps implements Runnable {
 			for (IDChapter chapter : chapters) {
 				out.nextChapter(chapter);
 				List<IDPage> pages = listener.getPages(manga, chapter);
-				if(Checker.isEmpty(pages)) continue;
+				if(Checker.isEmpty(pages)) 
+					continue;
 
 				if(Utils.dryRun()){
 					for (IDPage p : pages)

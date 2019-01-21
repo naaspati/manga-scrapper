@@ -1,9 +1,11 @@
 package sam.ms.entities;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 import sam.downloader.db.entities.impl.DChapterImpl;
 import sam.downloader.db.entities.meta.DStatus;
+import sam.downloader.db.entities.meta.IDPage;
 import sam.manga.samrock.Renamer;
 
 public class Chapter extends DChapterImpl {
@@ -46,5 +48,9 @@ public class Chapter extends DChapterImpl {
 	}
 	public Path getPath() {
 		return path;
+	}
+	@Override
+	public List<IDPage> getPages() {
+		return pages;
 	}
 }
