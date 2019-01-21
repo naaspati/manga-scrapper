@@ -15,4 +15,10 @@ include 'api'
 include 'services:webservice'
 */
 
+include ':DownloaderDB'
+include ':Scrapper'
+
+project(':Scrapper').projectDir = file('../Scrapper')
+project(':DownloaderDB').projectDir = file('../DownloaderDB')
+
 rootProject.name = 'MangafoxScrapper'

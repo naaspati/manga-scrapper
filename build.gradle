@@ -6,10 +6,18 @@ repositories {
 }
 
 dependencies {
-    compile files('myutils.jar', '../Scrapper/build/libs/Scrapper.jar', '../DownloaderDB/build/libs/DownloaderDB.jar');
-    compile 'org.json:json:20180130'
-    compile group: 'org.xerial', name: 'sqlite-jdbc', version: '3.7.2'
-    compile group: 'org.jsoup', name: 'jsoup', version: '1.10.3'
+//    implementation files('myutils.jar')
+    implementation ( project(':Scrapper')) {
+      transitive = false
+    }
+    implementation (project(':DownloaderDB')) {
+      transitive = false
+    }
+    implementation([
+            'org.jsoup:jsoup:1.11.3',
+            'org.json:json:20180130',
+            'org.xerial:sqlite-jdbc:3.7.2'
+          ])
 }
 
 version = 1.237
