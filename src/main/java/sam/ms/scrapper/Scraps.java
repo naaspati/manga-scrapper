@@ -47,12 +47,10 @@ import sam.internetutils.InternetUtils;
 import sam.io.fileutils.FilesUtilsIO;
 import sam.io.serilizers.StringWriter2;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
-import sam.manga.scrapper.FailedChapter;
-import sam.manga.scrapper.ScrappedChapter;
-import sam.manga.scrapper.ScrappedManga;
-import sam.manga.scrapper.ScrappedPage;
 import sam.manga.scrapper.Scrapper;
 import sam.manga.scrapper.ScrapperException;
+import sam.manga.scrapper.ScrapperMore;
+import sam.manga.scrapper.factory.ScrapperFactory;
 import sam.ms.entities.Chapter;
 import sam.ms.entities.Manga;
 import sam.ms.entities.Page;
@@ -66,7 +64,6 @@ import sam.tsv.Tsv;
 
 public class Scraps implements Runnable {
 
-	private final Scrapper scrapper;
 	private List<IDPage> failedPages = Collections.synchronizedList(new ArrayList<>(100));
 	private List<IDChapter> failedChapters = Collections.synchronizedList(new ArrayList<>(100));
 	private final static WeakQueue<InternetUtils> internetUtils = new WeakQueue<>(true, InternetUtils::new);
@@ -74,8 +71,7 @@ public class Scraps implements Runnable {
 	private ProgressPrint out; 
 	private Path mydir_tempdir = MyUtilsPath.TEMP_DIR.resolve(getClass().getSimpleName());
 
-	public Scraps(Scrapper scrapper, ScrapsListener listener) {
-		this.scrapper = scrapper;
+	public Scraps(ScrapsListener listener) {
 		this.listener = listener;
 
 		if(Files.exists(mydir_tempdir)) 
@@ -109,18 +105,31 @@ public class Scraps implements Runnable {
 
 		out = new ProgressPrint();
 		out.setMangaCount(listener.totalCountOfManga());
+		ScrapperFactory factory = ScrapperFactory.getInstance();
 
 		while(true) {
 			IDManga manga = Objects.requireNonNull(listener.nextManga());
 			if(manga == ScrapsListener.STOP_MANGA) 
 				break;
+			
+			Scrapper scrapper = null;
+			try {
+				scrapper = factory.findByUrl(manga.getUrl());
+			} catch (Exception e1) {
+				out.mangaFailed("scrapper not found", e1, null);
+			}
+			
+			if(scrapper == null) {
+				out.mangaFailed("scrapper not found", null, null);
+				continue;
+			}
 
-			List<IDChapter> chapters = listener.getChapters(manga);
+			List<IDChapter> chapters = listener.getChapters(scrapper, manga);
 			if(Checker.isEmpty(chapters)) continue;
 
 			for (IDChapter chapter : chapters) {
 				out.nextChapter(chapter);
-				List<IDPage> pages = listener.getPages(manga, chapter);
+				List<IDPage> pages = listener.getPages(scrapper, manga, chapter);
 				if(Checker.isEmpty(pages)) 
 					continue;
 
@@ -139,7 +148,7 @@ public class Scraps implements Runnable {
 
 					if(page.getImgUrl() == null) {
 						try{
-							setImageUrl(scrapper, i, pages);	
+							setImageUrl(scrapper, chapter, i, pages);	
 						} catch (ScrapperException| IOException e) {
 							setError(page, e);
 							pageFailed(page);
@@ -230,11 +239,17 @@ public class Scraps implements Runnable {
 			}
 		}
 	}
+	
 	// ..\Scrapper\src\test\java\MangaTest.java#setImageUrl
-	public static void setImageUrl(Scrapper scrapper, int index, List<IDPage> pages) throws ScrapperException, IOException {
+	public static void setImageUrl(Scrapper scrapper, IDChapter chap, int index, List<IDPage> pages) throws ScrapperException, IOException {
 		IDPage page = pages.get(index);
-
-		String[] st = scrapper.getPageImageUrl(page.getPageUrl());
+		
+		String[] st;
+		if(chap instanceof Chapter)
+			st = ((Chapter)chap).getImageUrls(page.getPageUrl());
+		else
+			st = ((ScrapperMore)scrapper).getPageImageUrl(chap.getUrl(), page.getPageUrl());
+			
 		if(Checker.isEmpty(st))
 			return;
 
@@ -435,34 +450,15 @@ public class Scraps implements Runnable {
 				return THREAD_COUNT == 1 ? Executors.newSingleThreadExecutor() : Executors.newFixedThreadPool(THREAD_COUNT);
 			}
 			@Override
-			public List<IDChapter> getChapters(IDManga m) {
+			public List<IDChapter> getChapters(Scrapper scrapper, IDManga m) {
 				Manga manga = (Manga) m;
 				int chapCount;
 				try {
-					ScrappedManga sm = scrapper.scrapManga(manga.getUrl());
-					ScrappedChapter[] chaps = sm.getChapters();
-
-					int count = 0;
-					for (ScrappedChapter sc : chaps) {
-						if(sc instanceof FailedChapter) {
-							FailedChapter f = (FailedChapter) sc;
-							Chapter c = manga.addChapter(new Chapter(manga, -1, sc.getTitle(), sc.getUrl(), sc.getVolume()));
-							String s = f.toString();
-							c.setFailed(s, f.getException());
-							out.chapterFailed(s, f.getException());
-							failedChapters.add(c);
-						} else {
-							IDChapter c = manga.findChapter(sc.getUrl());
-							if(c == null) {
-								c = new Chapter(manga, sc.getNumber(), sc.getTitle(), sc.getUrl(), sc.getVolume());
-								manga.addChapter(c);
-							}
-							if(Utils.DEBUG)
-								System.out.println("chapter scrapped: "+c.getNumber()+"  "+c.getTitle());
-							count++;
-						}
-					}
-					chapCount = count;
+					chapCount = manga.scrapChapters(scrapper.scrapManga(manga.getUrl()), (f,c) -> {
+						String s = f.toString();
+						out.chapterFailed(s, f.getException());
+						failedChapters.add(c);
+					});
 				} catch (IOException | ScrapperException e1) {
 					out.mangaFailed("Chapter Scrapping Failed", e1, manga);
 					manga.setFailed("Chapter Scrapping Failed", e1);
@@ -498,7 +494,7 @@ public class Scraps implements Runnable {
 				return chapters;
 			}
 			@Override
-			public List<IDPage> getPages(IDManga m, IDChapter c) {
+			public List<IDPage> getPages(Scrapper scrapper, IDManga m, IDChapter c) {
 				Chapter chapter = (Chapter) c;
 
 				/** FIXME somewhere status is set SUCCESS regardless of actual value
@@ -511,15 +507,7 @@ public class Scraps implements Runnable {
 				out.temporary("  -> extracting pages");
 
 				try {
-					ScrappedPage[] pages = scrapper.scrapPages(chapter.getUrl());
-					for (ScrappedPage sp : pages) {
-						IDPage p = chapter.findPage(sp.getPageUrl());
-						if(p == null)
-							chapter.addPage(p = new Page(chapter, sp.getOrder(), sp.getPageUrl()));
-
-						if(sp.getImgUrl() != null)
-							((Page)p).setImgUrl(sp.getImgUrl());
-					}
+					chapter.scrapPages();
 				} catch (Exception e) {
 					out.undoTemporary();
 					out.chapterFailed(" pages extracting failed: ", e);
@@ -531,7 +519,6 @@ public class Scraps implements Runnable {
 				out.undoTemporary();
 
 				List<IDPage> pages = chapter.getPages();
-
 				if(isEmpty(pages)) {
 					out.chapterFailed(chapter.getUrl()+"  -> NO PAGES EXTRACTED", null);
 					chapter.setFailed("NO PAGES EXTRACTED", null);

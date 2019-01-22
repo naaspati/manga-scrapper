@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -22,9 +23,11 @@ import sam.manga.samrock.chapters.ChapterFilter;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
 import sam.manga.samrock.chapters.ChapterUtils;
 import sam.manga.samrock.mangas.MangaUtils;
+import sam.manga.samrock.urls.MangaUrlsMeta;
 import sam.manga.samrock.urls.MangaUrlsUtils;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
+import sam.myutils.System2;
 import sam.string.StringBuilder2;
 import sam.tsv.Tsv;
 
@@ -91,14 +94,15 @@ public class Loader implements AutoCloseable {
 		if(db != null)
 			db.close();
 	}
+	
+	public static final String URL_COLUMN = Optional.ofNullable(System2.lookup("url_column")).orElse(MangaUrlsMeta.MANGAHERE);
 
-	public static void load(String urlColumn, MangaList mangasList, Collection<Integer> loadMangas, Collection<Integer> loadFilters) throws SQLException, IOException {
-		
+	public static void load(MangaList mangasList, Collection<Integer> loadMangas, Collection<Integer> loadFilters) throws SQLException, IOException {
 		try(Loader loader = new Loader()) {
 			// load missing mangas 
 			if(!loadMangas.isEmpty()) {
 				LOGGER.fine(() -> "manga_ids to load: "+loadMangas);
-				Map<Integer, Manga> map = loader.loadMangas(urlColumn, loadMangas);
+				Map<Integer, Manga> map = loader.loadMangas(URL_COLUMN, loadMangas);
 				
 				if(loadMangas.size() != map.size()) 
 					throw new SQLException(loadMangas.stream().filter(id -> !map.containsKey(id)).map(i -> i.toString()).collect(Collectors.joining(",",  "mangas not found for id(s): [", "]")));

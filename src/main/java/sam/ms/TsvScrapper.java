@@ -18,7 +18,6 @@ import java.util.concurrent.Callable;
 
 import sam.downloader.db.entities.meta.IDManga;
 import sam.manga.scrapper.ScrapperException;
-import sam.manga.scrapper.scrappers.impl.ScrapperCached;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
 import sam.ms.scrapper.Scraps;
@@ -33,13 +32,10 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 	private final LinkedList<Integer> ids = new LinkedList<>();
 	private final int limit;
 	private Integer firstNewManga;
-	private final ScrapperCached scrapper;
-	
 
 	public TsvScrapper(MangaList mangaList, int limit) throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException, IOException, ScrapperException {
 		this.mangaList = mangaList;
 		this.limit = limit;
-		this.scrapper = ScrapperCached.createDefaultInstance(); 
 	}
 
 	private void read(String msg, String tsvFile) throws IOException {
@@ -56,7 +52,7 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 			Manga m = mangaList.get(mangaId.getInt(r));
 
 			if(m == null) {
-				m = new Manga(Utils.MANGA_DIR, r, scrapper.urlColumn());
+				m = new Manga(Utils.MANGA_DIR, r, Loader.URL_COLUMN);
 				mangaList.add(m);
 			}
 
@@ -129,7 +125,7 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 		});
 
 		this.totalCount = ids.size();
-		Loader.load(scrapper.urlColumn(), mangaList, Collections.emptyList(), ids);
+		Loader.load(mangaList, Collections.emptyList(), ids);
 
 		if(Utils.debug() || Utils.dryRun()) {
 			ids.forEach(id -> {
@@ -139,7 +135,7 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 			System.out.println("\n\n");
 		}
 
-		new Scraps(scrapper, this).run();
+		new Scraps(this).run();
 		return null;	
 	}
 }

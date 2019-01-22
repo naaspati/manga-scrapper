@@ -20,7 +20,6 @@ import sam.downloader.db.entities.meta.IDManga;
 import sam.manga.samrock.chapters.ChapterFilterBase;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
 import sam.manga.scrapper.ScrapperException;
-import sam.manga.scrapper.scrappers.impl.ScrapperCached;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
 import sam.ms.scrapper.Scraps;
@@ -49,10 +48,7 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 			return;
 		}
 		
-		ScrapperCached scrapper = ScrapperCached.createDefaultInstance();
-		
 		Loader.load(
-				scrapper.urlColumn(),
 				mangasList,
 				filters.keySet().stream().filter(id -> mangasList.get(id) == null).collect(Collectors.toList()), 
 				filters.entrySet().stream().filter(e -> filter2(e.getValue()).predicate == null).map(e -> e.getKey()).collect(Collectors.toList())
@@ -109,7 +105,7 @@ public class MangaIdChapterNumberScrapper implements ScrapsListener {
 		}
 		
 		this.manga_size = mangas.size();
-		Scraps scraps = new Scraps(scrapper, this);
+		Scraps scraps = new Scraps(this);
 		scraps.run();
 	}
 	private Filter2 filter2(Object value) {
