@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -43,6 +44,7 @@ import sam.downloader.db.entities.meta.IDChapter;
 import sam.downloader.db.entities.meta.IDManga;
 import sam.downloader.db.entities.meta.IDPage;
 import sam.internetutils.InternetUtils;
+import sam.io.fileutils.FilesUtilsIO;
 import sam.io.serilizers.StringWriter2;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
 import sam.manga.scrapper.FailedChapter;
@@ -56,6 +58,7 @@ import sam.ms.entities.Manga;
 import sam.ms.entities.Page;
 import sam.ms.extras.Utils;
 import sam.myutils.Checker;
+import sam.myutils.MyUtilsPath;
 import sam.myutils.System2;
 import sam.reference.WeakQueue;
 import sam.string.StringUtils;
@@ -69,10 +72,14 @@ public class Scraps implements Runnable {
 	private final static WeakQueue<InternetUtils> internetUtils = new WeakQueue<>(true, InternetUtils::new);
 	private ScrapsListener listener;
 	private ProgressPrint out; 
+	private Path mydir_tempdir = MyUtilsPath.TEMP_DIR.resolve(getClass().getSimpleName());
 
 	public Scraps(Scrapper scrapper, ScrapsListener listener) {
 		this.scrapper = scrapper;
 		this.listener = listener;
+
+		if(Files.exists(mydir_tempdir)) 
+			FilesUtilsIO.delete(mydir_tempdir.toFile());
 	}
 	private final AtomicBoolean running = new AtomicBoolean();
 	private int THREAD_COUNT;
@@ -134,9 +141,8 @@ public class Scraps implements Runnable {
 						try{
 							setImageUrl(scrapper, i, pages);	
 						} catch (ScrapperException| IOException e) {
-							out.pageFailed(page);
-							failedPages.add(page);
 							setError(page, e);
+							pageFailed(page);
 						}
 					}
 
@@ -146,13 +152,12 @@ public class Scraps implements Runnable {
 					}
 					executorService.execute(() -> {
 						Path target = listener.getSavePath(page);
-						
+
 						try {
-							downloadPage(target, page);
-							out.pageSuccess(page);
-						} catch (IOException e) {
-							out.pageFailed(page);
-							failedPages.add(page);
+							if(downloadPage(target, page))
+								out.pageSuccess(page);
+							else
+								pageFailed(page);	
 						} finally {
 							latch.countDown();
 						}
@@ -180,7 +185,51 @@ public class Scraps implements Runnable {
 		if(out != null)
 			out.close();
 	}
-	
+
+	private final Map<Chapter, Path> chaps = new IdentityHashMap<>();
+	private final Object LOCK = new Object();
+	private volatile Object[] current_chap = {null, null};
+
+	private void pageFailed(IDPage page) {
+		out.pageFailed(page);
+		failedPages.add(page);
+
+		if(!(page instanceof Page))
+			return;
+
+		Page p = (Page) page;
+		Path dir;
+		Object[] o = current_chap;
+
+		if(o[0] == p.getChapter()){
+			dir = (Path) o[1];
+		} else {
+			synchronized (LOCK) {
+				dir = chaps.computeIfAbsent(p.getChapter(), c -> {
+					Path d = mydir_tempdir.resolve(String.valueOf(c.getManga().getMangaId())).resolve(StringUtils.doubleToString(c.getNumber()));
+					try {
+						Files.createDirectories(d);
+					} catch (IOException e1) {
+						e1.printStackTrace();
+						return null;
+					}
+					return d;
+				});
+			}	
+			current_chap = new Object[]{p.getChapter(), dir};
+		}
+
+		if(dir == null)
+			return;
+
+		if(p.getError() != null) {
+			try {
+				StringWriter2.setText(dir.resolve(out.toString(p.getOrder())), p.getError());
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
 	// ..\Scrapper\src\test\java\MangaTest.java#setImageUrl
 	public static void setImageUrl(Scrapper scrapper, int index, List<IDPage> pages) throws ScrapperException, IOException {
 		IDPage page = pages.get(index);
@@ -201,7 +250,7 @@ public class Scraps implements Runnable {
 				pages.get(n).setImgUrl(s);
 		}
 	}
-	
+
 	private void setFailed(Object c, String error) {
 		if(c instanceof ErrorSetter)
 			((ErrorSetter)c).setError(error, DStatus.FAILED);
@@ -235,15 +284,14 @@ public class Scraps implements Runnable {
 					pages.forEach(p -> p.setImgUrl(null));
 
 					for (IDPage page : pages) {
-						try {
-							failed++;
-							downloadPage(listener.getSavePath(page), page);
+						failed++;
+						if(downloadPage(listener.getSavePath(page), page)){
 							System.out.print(page.getOrder()+" ");
 							failedPages.remove(page);
-							success.put(page, null);
-						} catch (IOException e) {
+							success.put(page, null);	
+						} else {
 							System.out.print(red(page.getOrder()+" "));
-							failed++;
+							failed++;	
 						}
 					}
 					if(failed == 0)
@@ -263,14 +311,16 @@ public class Scraps implements Runnable {
 		if(page instanceof ErrorSetter)
 			((ErrorSetter)page).setFailed(null, e);
 	}
-	private void downloadPage(Path target, IDPage page) throws IOException {
+	private boolean downloadPage(Path target, IDPage page) {
 		InternetUtils internet = internetUtils.poll();
+
 		try {
 			downloadPage(page.getImgUrl(), internet, target);
 			setSuccess(page);
+			return true;
 		} catch (IOException e) {
 			setError(page, e);
-			throw e;
+			return false;
 		} finally {
 			internetUtils.offer(internet);
 		}

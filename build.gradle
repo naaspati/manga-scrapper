@@ -13,7 +13,9 @@ dependencies {
     implementation (project(':DownloaderDB')) {
       transitive = false
     }
+    
     implementation([
+             'com.squareup.okhttp3:okhttp:3.12.1',
             'org.jsoup:jsoup:1.11.3',
             'org.json:json:20180130',
             'org.xerial:sqlite-jdbc:3.7.2'

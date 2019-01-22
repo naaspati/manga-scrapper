@@ -460,7 +460,7 @@ class ProgressPrint {
 	}
 	private String[] integerToString = new String[100];
 
-	private String toString(int n) {
+	public String toString(int n) {
 		if(n >= integerToString.length)
 			return Integer.toString(n);
 
