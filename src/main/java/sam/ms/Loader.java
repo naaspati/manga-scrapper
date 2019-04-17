@@ -4,6 +4,10 @@ import static sam.console.ANSI.yellow;
 import static sam.manga.samrock.mangas.MangasMeta.DIR_NAME;
 import static sam.manga.samrock.mangas.MangasMeta.MANGA_ID;
 import static sam.manga.samrock.mangas.MangasMeta.MANGA_NAME;
+import static sam.manga.samrock.urls.MangaUrlsMeta.MANGAFOX;
+import static sam.manga.samrock.urls.MangaUrlsMeta.MANGAHERE;
+import static sam.manga.samrock.urls.MangaUrlsMeta.MANGAKAKALOT;
+import static sam.manga.samrock.urls.MangaUrlsMeta.TABLE_NAME;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -14,10 +18,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import sam.logging.MyLoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import sam.manga.samrock.SamrockDB;
 import sam.manga.samrock.chapters.ChapterFilter;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
@@ -33,7 +38,7 @@ import sam.tsv.Tsv;
 
 public class Loader implements AutoCloseable {
 	private final SamrockDB  db;
-	private static final Logger LOGGER = MyLoggerFactory.logger(Loader.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(Loader.class);
 
 	public Loader() throws SQLException {
 		this.db = new SamrockDB();
@@ -44,10 +49,37 @@ public class Loader implements AutoCloseable {
 			return Collections.emptyMap();
 
 		Map<Integer, Manga> map = new HashMap<>();
+		Map<String, String> mangakakalot_map = new HashMap<>();
+		Map<Integer, String> mangaurls = new HashMap<>();
 
 		MangaUtils mangas = new MangaUtils(db);
-		MangaUrlsUtils urls = new MangaUrlsUtils(db);
-		Map<Integer, String> mangaurls = urls.getUrls(mangaIds, url_column);
+		MangaUrlsUtils urlUtil = new MangaUrlsUtils(db);
+
+		StringBuilder sql = new StringBuilder("select * from ").append(TABLE_NAME)
+				.append(" WHERE manga_id IN(");
+		mangaIds.forEach(s -> {
+			sql.append(s).append(",");
+			mangaurls.put(s, null);
+		});
+		sql.setCharAt(sql.length() - 1, ')');
+
+		db.iterate(sql.toString(), rs -> {
+			int id = rs.getInt(MANGA_ID);
+			String mangahere = rs.getString(MANGAHERE);
+			String mangafox = rs.getString(MANGAFOX);
+			String mangakakalot = rs.getString(MANGAKAKALOT);
+
+			if(mangakakalot != null)
+				mangakakalot_map.put(mangahere != null ? mangahere : mangafox, mangakakalot);
+
+			if(mangahere != null)
+				mangaurls.put(id, urlUtil.resolveWith(mangahere, MANGAHERE));
+			else
+				mangaurls.put(id, urlUtil.resolveWith(mangafox, MANGAFOX));
+		});
+
+		if(!mangakakalot_map.isEmpty())
+			System.getProperties().put(MANGAKAKALOT, mangakakalot_map);
 
 		if(mangaurls.values().stream().anyMatch(Objects::isNull)) {
 			System.out.println("column-name: "+url_column);
@@ -94,21 +126,21 @@ public class Loader implements AutoCloseable {
 		if(db != null)
 			db.close();
 	}
-	
+
 	public static final String URL_COLUMN = Optional.ofNullable(System2.lookup("url_column")).orElse(MangaUrlsMeta.MANGAHERE);
 
 	public static void load(MangaList mangasList, Collection<Integer> loadMangas, Collection<Integer> loadFilters) throws SQLException, IOException {
 		try(Loader loader = new Loader()) {
 			// load missing mangas 
 			if(!loadMangas.isEmpty()) {
-				LOGGER.fine(() -> "manga_ids to load: "+loadMangas);
+				LOGGER.debug("manga_ids to load: {}", loadMangas);
 				Map<Integer, Manga> map = loader.loadMangas(URL_COLUMN, loadMangas);
-				
+
 				if(loadMangas.size() != map.size()) 
 					throw new SQLException(loadMangas.stream().filter(id -> !map.containsKey(id)).map(i -> i.toString()).collect(Collectors.joining(",",  "mangas not found for id(s): [", "]")));
 				map.forEach((s,manga) -> mangasList.add(manga));
 			}
-			
+
 			// load missing filter
 			Map<Integer, ChapterFilter> filters = loader.loadChapterFilters(loadFilters, Utils.debug() ? "Except" : null);
 			filters.forEach((id, filter) -> mangasList.get(id).setFilter(ChapterFilterUtils.invertFilter("Except ", filter)));

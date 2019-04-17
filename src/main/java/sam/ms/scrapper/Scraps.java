@@ -45,7 +45,7 @@ import sam.downloader.db.entities.meta.IDManga;
 import sam.downloader.db.entities.meta.IDPage;
 import sam.internetutils.InternetUtils;
 import sam.io.fileutils.FilesUtilsIO;
-import sam.io.serilizers.StringWriter2;
+import sam.io.serilizers.StringIOUtils;
 import sam.manga.samrock.chapters.ChapterFilterUtils;
 import sam.manga.scrapper.Scrapper;
 import sam.manga.scrapper.ScrapperException;
@@ -58,7 +58,7 @@ import sam.ms.extras.Utils;
 import sam.myutils.Checker;
 import sam.myutils.MyUtilsPath;
 import sam.myutils.System2;
-import sam.reference.WeakQueue;
+import sam.reference.WeakPool;
 import sam.string.StringUtils;
 import sam.tsv.Tsv;
 
@@ -66,7 +66,7 @@ public class Scraps implements Runnable {
 
 	private List<IDPage> failedPages = Collections.synchronizedList(new ArrayList<>(100));
 	private List<IDChapter> failedChapters = Collections.synchronizedList(new ArrayList<>(100));
-	private final static WeakQueue<InternetUtils> internetUtils = new WeakQueue<>(true, InternetUtils::new);
+	private final static WeakPool<InternetUtils> internetUtils = new WeakPool<>(true, InternetUtils::new);
 	private ScrapsListener listener;
 	private ProgressPrint out; 
 	private Path mydir_tempdir = MyUtilsPath.TEMP_DIR.resolve(getClass().getSimpleName());
@@ -111,14 +111,14 @@ public class Scraps implements Runnable {
 			IDManga manga = Objects.requireNonNull(listener.nextManga());
 			if(manga == ScrapsListener.STOP_MANGA) 
 				break;
-			
+
 			Scrapper scrapper = null;
 			try {
 				scrapper = factory.findByUrl(manga.getUrl());
 			} catch (Exception e1) {
 				out.mangaFailed("scrapper not found", e1, null);
 			}
-			
+
 			if(scrapper == null) {
 				out.mangaFailed("scrapper not found", null, null);
 				continue;
@@ -233,23 +233,23 @@ public class Scraps implements Runnable {
 
 		if(p.getError() != null) {
 			try {
-				StringWriter2.setText(dir.resolve(out.toString(p.getOrder())), p.getError());
+				StringIOUtils.write(p.getError(), dir.resolve(out.toString(p.getOrder())));
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
 	}
-	
+
 	// ..\Scrapper\src\test\java\MangaTest.java#setImageUrl
 	public static void setImageUrl(Scrapper scrapper, IDChapter chap, int index, List<IDPage> pages) throws ScrapperException, IOException {
 		IDPage page = pages.get(index);
-		
+
 		String[] st;
 		if(chap instanceof Chapter)
 			st = ((Chapter)chap).getImageUrls(page.getPageUrl());
 		else
 			st = ((ScrapperMore)scrapper).getPageImageUrl(chap.getUrl(), page.getPageUrl());
-			
+
 		if(Checker.isEmpty(st))
 			return;
 
@@ -296,10 +296,9 @@ public class Scraps implements Runnable {
 					System.out.print(yellow(chapter.getNumber()+" "+ProgressPrint.stringOf(chapter.getTitle()))+": ");
 					int failed = 0;
 
-					pages.forEach(p -> p.setImgUrl(null));
-
 					for (IDPage page : pages) {
 						failed++;
+
 						if(downloadPage(listener.getSavePath(page), page)){
 							System.out.print(page.getOrder()+" ");
 							failedPages.remove(page);
@@ -369,7 +368,7 @@ public class Scraps implements Runnable {
 				System.out.println(green(failedPagesPath + "  created"));
 				System.out.println(red("failed manga-chaps: ")+sb);
 				if(sb.length() != 0)
-					StringWriter2.setText(failedPagesPath.resolveSibling("failed-mangas-command.txt"), sb);
+					StringIOUtils.write(sb, failedPagesPath.resolveSibling("failed-mangas-command.txt"));
 				System.out.println(yellow("created: ")+failedPagesPath);
 			} catch (IOException e) {
 				System.out.println(red("failed to write: ")+failedPagesPath+"  error:"+e);
@@ -546,7 +545,8 @@ public class Scraps implements Runnable {
 					}
 					int[] array = Stream.of(files).mapToInt(s -> {
 						try {
-							return Integer.parseInt(s);
+							int n = s.lastIndexOf('.'); 
+							return Integer.parseInt(n > 0 ? s.substring(0, n) : s);
 						} catch (NumberFormatException e) {
 							e.printStackTrace();
 							return Integer.MAX_VALUE;

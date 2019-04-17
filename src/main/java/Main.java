@@ -105,7 +105,7 @@ public class Main {
 				}
 			} catch (Exception e) {
 				if(download_url != null)
-					System.out.println(ANSI.red("failed download: ")+download_url+"  errror: "+MyUtilsException.exceptionToString(e));
+					System.out.println(ANSI.red("failed download: ")+download_url+"  errror: "+MyUtilsException.append(new StringBuilder(), e, true));
 				else
 					e.printStackTrace();
 			}

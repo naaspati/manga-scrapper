@@ -7,17 +7,17 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.logging.Level;
+
+import org.slf4j.LoggerFactory;
 
 import sam.config.MyConfig;
-import sam.logging.MyLoggerFactory;
 import sam.myutils.System2;
 
 public class Utils {
 	public static final Path APP_DATA = Paths.get(System2.lookup("APP_DATA"));
 	public static final Path MANGA_DIR = Paths.get(MyConfig.MANGA_DIR);
 	public static final boolean DRY_RUN = System2.lookupBoolean("DRY_RUN", false);
-	public static final boolean DEBUG = System2.lookupBoolean("DEBUG", MyLoggerFactory.logger(Utils.class).isLoggable(Level.FINE));
+	public static final boolean DEBUG = System2.lookupBoolean("DEBUG", LoggerFactory.getLogger(Utils.class).isDebugEnabled());
 	private static final List<Runnable> shutdownTasks = new ArrayList<>();
 	private static final List<Path> CREATED_DIRS = new ArrayList<>();
 	

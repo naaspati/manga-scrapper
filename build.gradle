@@ -6,7 +6,8 @@ repositories {
 }
 
 dependencies {
-    implementation files('myutils.jar')
+   implementation 'org.slf4j:slf4j-simple:1.8.0-beta4'
+   implementation files('myutils.jar')
     implementation ( project(':Scrapper')) {
       transitive = false
     }
@@ -58,7 +59,7 @@ task install(type: Copy, dependsOn:[installDist, deleteJars]) {
 
 def versionText() {
   if(!version && version == 'unspecified') return '';
-  String s = "echo version: %APP_VERSION% (${java.time.LocalDateTime.now()}^)"
+  String s = "echo version: %APP_VERSION% (${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM))}^)"
   return """
   SET APP_VERSION=${version}
   if [%1]==[-v] (
