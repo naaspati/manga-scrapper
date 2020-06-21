@@ -3,98 +3,85 @@ import static sam.manga.samrock.mangas.MangasMeta.DIR_NAME;
 import static sam.manga.samrock.mangas.MangasMeta.MANGA_ID;
 import static sam.manga.samrock.mangas.MangasMeta.MANGA_NAME;
 
-import java.io.IOException;
 import java.nio.file.Path;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Objects;
-import java.util.function.BiConsumer;
-import java.util.function.DoublePredicate;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
-import sam.downloader.db.entities.impl.DMangaImpl;
-import sam.downloader.db.entities.meta.DStatus;
-import sam.downloader.db.entities.meta.IDChapter;
-import sam.manga.samrock.Renamer;
-import sam.manga.scrapper.FailedChapter;
-import sam.manga.scrapper.ScrappedChapter;
-import sam.manga.scrapper.ScrappedManga;
-import sam.manga.scrapper.ScrapperException;
-import sam.tsv.Row;
+import com.almworks.sqlite4java.SQLiteException;
+import com.almworks.sqlite4java.SQLiteStatement;
 
-public class Manga extends DMangaImpl {
+import sam.api.store.entities.meta.MutableList;
+import sam.api.store.entities.meta.SChapter;
+import sam.api.store.entities.meta.SManga;
+import sam.collection.Iterators;
+import sam.manga.samrock.chapters.MinimalChapter;
 
-	private String _url;
-	private transient DoublePredicate filter;
-	private int limit = Integer.MAX_VALUE;
-	private final Path path;
-	
-	public Manga(Path mangaRoot, ResultSet rs, String url) throws SQLException {
-		super(rs.getInt(MANGA_ID), rs.getString(DIR_NAME), rs.getString(MANGA_NAME), url, null, null);
-		this._url = url;
-		this.path = mangaRoot.resolve(dir_name);
-    }
-	public Manga(Path mangaRoot, Row row, String urlColumn) {
-		super(row.getInt(MANGA_ID), Renamer.mangaDirName(row.get(MANGA_NAME)), row.get(MANGA_NAME), row.get(urlColumn), null, null);
-		this._url = url;
-		this.path = mangaRoot.resolve(dir_name);
-    }
-	
-	public Manga(Path mangaRoot, int manga_id, String dir_name, String manga_name, String url, String error, DStatus status) {
-		super(manga_id, dir_name, manga_name, url, error, status);
-		this._url = url;
-		this.path = mangaRoot.resolve(dir_name);
-	}
-	@Override
-	public Chapter addChapter(IDChapter chapter) {
-		return (Chapter) super.addChapter(chapter);
-	}
-    public void setFilter(DoublePredicate filter) {
-        this.filter = Objects.requireNonNull(filter);
-    }
-    public DoublePredicate getFilter() {
-        return filter;
-    }
-	public Path dirPath(Path mangaDir) {
-		return mangaDir.resolve(getDirName());
-	}
-	@Override
-	public String getUrl() {
-		return this._url;
-	}
-	public void setUrl(String url) {
-		this._url = url;
-	}
-	public void setLimit(int limit) {
-		this.limit = limit;
-	}
-	public int getLimit() {
-		return limit;
-	}
-	public Path getPath() {
-		return path;
+public class Manga extends StatusContainer implements SManga {
+	public static String[] dbFields() {
+		return new String[]{MANGA_ID, DIR_NAME, MANGA_NAME};
 	}
 	
-	public int scrapChapters(ScrappedManga sm, BiConsumer<FailedChapter, IDChapter> onFailed) throws IOException, ScrapperException {
-		ScrappedChapter[] chaps = sm.getChapters();
+	protected final int manga_id;
+	protected final String dir_name;
+	protected final String manga_name;
+	protected String[] urls;
+	protected final List<Chapter> chapters = new ArrayList<>();
+	
+	public Manga(SQLiteStatement rs) throws SQLiteException {
+		this.manga_id = rs.columnInt(0);
+		this.dir_name = rs.columnString(1);
+		this.manga_name = rs.columnString(2);
+	}
 
-		int count = 0;
-		Chapter c;
-		for (ScrappedChapter sc : chaps) {
-			if(sc instanceof FailedChapter) {
-				FailedChapter f = (FailedChapter) sc;
-				c = addChapter(new Chapter(sc, this));
-				onFailed.accept(f, c);
-				c.setFailed(f.toString(), f.getException());
-			} else {
-				c = (Chapter)findChapter(sc.getUrl());
-				if(c == null) {
-					c = new Chapter(sc, this);
-					addChapter(c);
-				}
-				count++;
+	public Manga(int manga_id, String dir_name, String manga_name, String[] urls) {
+		this.manga_id = manga_id;
+		this.dir_name = dir_name;
+		this.manga_name = manga_name;
+		this.urls = urls;
+	}
+	
+	public void setUrls(String[] urls) {
+		this.urls = urls;
+	}
+
+	@Override public int getId(){ return this.manga_id; }
+	@Override public int getMangaId(){ return this.manga_id; }
+	@Override public String getDirName(){ return this.dir_name; }
+	@Override public String getMangaName(){ return this.manga_name; }
+	@Override public String[] getUrls(){ return this.urls; }
+	public MutableList<? extends SChapter> getChapters() {
+		return new MutableList<Chapter>(chapters) {
+			@Override
+			protected Object keyOf(Chapter item) {
+				return item == null ? null : item.getUrl();
 			}
-			c.setScrappedChapter(sc);
-		}
-		return count;
+		};
+	}
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	@Override
+	public Iterator<MinimalChapter> iterator() {
+		Iterator itr = chapters == null ? Iterators.empty() : chapters.iterator();
+		return itr;
+	}
+	public void setChapters(List<Chapter> chapters) {
+		this.chapters.clear();
+		this.chapters.addAll(chapters);
+	}
+    
+	@Override
+	public int size() {
+		return this.chapters.size();
+	}
+
+	@Deprecated
+	@Override
+	public Path getDirPath() {
+		throw new IllegalAccessError();
+	}
+
+	public void init() {
+		this.chapters.forEach(c -> c.init(this));
 	}
 }

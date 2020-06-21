@@ -1,5 +1,6 @@
 import static sam.console.ANSI.yellow;
 
+import java.io.PrintStream;
 import java.util.Formatter;
 
 enum CMD {
@@ -8,7 +9,7 @@ enum CMD {
     FORMAT("--format", null, "format download"),
     MCHAP("-mc", "--mchap", "extract and download chapters using manga-chapters pair(s)"),
     URL("-u", "--url", "extract scrap and download using url, (range can be supplied of chapter)"),
-    TSV("-t", "--tsv", "extract for data in updatedManga.tsv, newManga.tsv "),
+    // TSV("-t", "--tsv", "extract for data in updatedManga.tsv, newManga.tsv "),
     DB_UPDATE_CHAPTERS("-duc", "--db-chapters-update", "[chapter ids]  update page urls for given chapters"),
     DB("db", null, "open id, name list"),
     ;
@@ -26,17 +27,13 @@ enum CMD {
         return testAgainst.equalsIgnoreCase(cmd1) || testAgainst.equalsIgnoreCase(cmd2);            
     }
 
-    public static void showHelp() {
+    public static void showHelp(PrintStream out) {
         StringBuilder b = new StringBuilder();
         Formatter formatter = new Formatter(b);
         String format = yellow("%-7s%-15s%s%n");
         for (CMD s : CMD.values()) formatter.format(format, s.cmd1, s.cmd2 == null ? "" : s.cmd2, s.about);
         formatter.close();
-
-        b.append("\nOPTIONS\n");
-        b.append("size INTEGER   number of chapters to download (if available), (only applies to -t, --tsv command)\n");
-        b.append("--log          log mode\n");
-
-        System.out.println(b);
+        
+        out.println(b);
     }
 }

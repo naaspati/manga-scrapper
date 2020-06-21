@@ -16,8 +16,8 @@ import java.util.LinkedList;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 
-import sam.downloader.db.entities.meta.IDManga;
-import sam.manga.scrapper.ScrapperException;
+import sam.api.store.entities.meta.SManga;
+import sam.manga.api.scrapper.ScrapperException;
 import sam.ms.entities.Manga;
 import sam.ms.extras.Utils;
 import sam.ms.scrapper.Scraps;
@@ -77,7 +77,7 @@ public class TsvScrapper implements ScrapsListener, Callable<Void> {
 	private int totalCount;
 
 	@Override
-	public IDManga nextManga() {
+	public SManga nextManga() {
 		Integer id = ids.pollFirst();
 		
 		if(id == null)

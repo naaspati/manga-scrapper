@@ -1,7 +1,7 @@
 package sam.ms.scrapper;
 
 import static java.lang.System.arraycopy;
-import static java.lang.System.out;
+import static sam.api.config.InjectorKeys.DEBUG;
 import static sam.console.ANSI.cyan;
 import static sam.console.ANSI.red;
 import static sam.console.ANSI.yellow;
@@ -9,19 +9,30 @@ import static sam.console.VT100.erase_down;
 import static sam.console.VT100.save_cursor;
 import static sam.console.VT100.unsave_cursor;
 
+import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.function.UnaryOperator;
 
+import javax.inject.Inject;
+import javax.inject.Named;
+
+import sam.api.store.entities.meta.SChapter;
+import sam.api.store.entities.meta.SManga;
+import sam.api.store.entities.meta.SPage;
 import sam.console.ANSI;
-import sam.downloader.db.entities.meta.IDChapter;
-import sam.downloader.db.entities.meta.IDPage;
-import sam.ms.entities.Manga;
-import sam.ms.extras.Utils;
 import sam.myutils.Checker;
 import sam.string.StringBuilder2;
 
 class ProgressPrint {
 	private final StringBuilder2 builder = new StringBuilder2();
+	private final boolean debug;
+	private final PrintStream out;
+	
+	@Inject
+	public ProgressPrint(@Named(DEBUG) boolean debug, PrintStream out) {
+		this.out = out;
+		this.debug = debug;
+	}
 
 	public void setMangaCount(int mangaCount) {
 		total.mangaCount(mangaCount);
@@ -43,11 +54,11 @@ class ProgressPrint {
 	private final char[] NAME = ANSI.yellow(",  name: ").toCharArray();
 	private final char[] URL = ANSI.yellow("url: ").toCharArray();
 
-	public void nextManga(Manga manga) {
+	public void nextManga(SManga manga) {
 		total.nextManga();
 		erase_down();
 
-		if(manga.getUrl() == null || manga.getDirName() == null){
+		if(Checker.isEmpty(manga.getUrls()) || manga.getDirName() == null) {
 			total.mangaFailed();
 			out.println("\n"+red("FAILED Manga:  url == null || dir == null")+manga);
 		} else {
@@ -72,14 +83,22 @@ class ProgressPrint {
 			synchronized (builder) {
 				builder.setLength(0);
 				builder.append(PROGRESS).cyan(Integer.toString(total.mangaProgress)).append('/').append(toChars(total.mangaCount)).ln()
-				.append(ID).append(Integer.toString(manga.getMangaId())).append(NAME).append(manga.getMangaName()).ln()
-				.append(URL).append(manga.getUrl()).ln();
+				.append(ID).append(Integer.toString(manga.getMangaId())).append(NAME).append(manga.getMangaName()).ln();
 				out.print(builder.toString());
 				builder.setLength(0);
 			}
 		} 
-
-
+		totalProgress();
+	}
+	
+	public void mangaUrl(String manga_url) {
+		erase_down();
+		synchronized (builder) {
+			builder.setLength(0);
+			builder.append(URL).append(manga_url).ln();
+			out.print(builder.toString());
+			builder.setLength(0);
+		}
 		totalProgress();
 	}
 
@@ -88,7 +107,7 @@ class ProgressPrint {
 	public void mangaFailed(String string, Exception e1, Object cause) {
 		total.mangaFailed();
 
-		if(Utils.DEBUG) {
+		if(debug) {
 			out.println(MANGA_FAILED_MSG);
 			out.println(cause);
 			e1.printStackTrace(out);
@@ -103,7 +122,7 @@ class ProgressPrint {
 	
 	// private final BasicFormat nextChapFormat = new BasicFormat(green("  ({}/{}) ")+yellow("Chapter: ")+"{} {}");
 	
-	public void nextChapter(IDChapter c) {
+	public void nextChapter(SChapter c) {
 		
 		synchronized (builder) {
 			total.chapterProgress();
@@ -391,7 +410,7 @@ class ProgressPrint {
 
 	private final Wrap redNumber = new Wrap(ANSI::red, 2);
 
-	public void pageFailed(IDPage page) {
+	public void pageFailed(SPage page) {
 		synchronized(numbers) {
 			out.print(redNumber.wrap(numberAndSpace(page.getOrder())));
 			total.failedPagesCount();
@@ -399,14 +418,14 @@ class ProgressPrint {
 		}
 	}
 	private final Wrap yelloNumber = new Wrap(ANSI::yellow, 2);
-	public void pageSkipped(IDPage page) {
+	public void pageSkipped(SPage page) {
 		synchronized(numbers) {
 			out.print(yelloNumber.wrap(numberAndSpace(page.getOrder())));
 			total.failedPagesCount();
 			totalProgress();	
 		}
 	}
-	public void pageSuccess(IDPage page) {
+	public void pageSuccess(SPage page) {
 		synchronized(numbers) {
 			out.print(numberAndSpace(page.getOrder()));	
 		}
@@ -497,6 +516,4 @@ class ProgressPrint {
 	public static String stringOf(String s) {
 		return s == null ? red("null") : s;
 	}
-
-
 }

@@ -127,7 +127,7 @@ public class Loader implements AutoCloseable {
 			db.close();
 	}
 
-	public static final String URL_COLUMN = Optional.ofNullable(System2.lookup("url_column")).orElse(MangaUrlsMeta.MANGAHERE);
+	public static final String URL_COLUMN = Optional.ofNullable(config.lookup("url_column")).orElse(MangaUrlsMeta.MANGAHERE);
 
 	public static void load(MangaList mangasList, Collection<Integer> loadMangas, Collection<Integer> loadFilters) throws SQLException, IOException {
 		try(Loader loader = new Loader()) {

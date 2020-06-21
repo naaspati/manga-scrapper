@@ -1,85 +1,29 @@
 apply plugin: 'java'
 apply plugin: 'application'
+apply from: '../base.gradle'
+
+ext.appdir0 = 'MangaFox_Scraper/app'
+apply from: '../tasks.gradle'
+
+version = 1.35
+mainClassName = 'Main'
 
 repositories {
     jcenter()
 }
 
 dependencies {
-   implementation 'org.slf4j:slf4j-api:1.8.0-beta4'
-   implementation files('myutils.jar')
-    implementation ( project(':Scrapper')) {
-      transitive = false
-    }
-    implementation (project(':DownloaderDB')) {
-      transitive = false
-    }
-    
-    implementation([
-             'com.squareup.okhttp3:okhttp:3.12.1',
-            'org.jsoup:jsoup:1.11.3',
-            'org.json:json:20180130',
-            'org.xerial:sqlite-jdbc:3.7.2'
-          ])
+   implementation(
+   HPPC, OK_HTTP, JSOUP, SQLITE_4JAVA, SQLITE_4JAVA_LIB, FEATHER, GSON,  
+   ORG_JSON, SLF_SIMPLE, 
+   project(':api-scrapper'),
+   project(':api-models-helpers'),
+   project(':Scrapper'), 
+  MY_UTILS,
+   )
 }
-
-version = 1.238
-sourceCompatibility = JavaVersion.VERSION_1_8 
-targetCompatibility = JavaVersion.VERSION_1_8
- 
-mainClassName = 'Main'
-ext.appdir = file(/D:\Core Files\Emulator\dolphin\Manga\Data\MangaFox_Scraper\app/)
-
-task deleteJars {
-  doLast {
-     file(appdir).listFiles().each({
-       if(it.name.endsWith('.jar'))
-         it.delete();
-     });
-  }
-}
-
-task install(type: Copy, dependsOn:[installDist, deleteJars]) {
-  def libdir = file(new File(installDist.destinationDir, 'lib')) 
-  from libdir
-  into appdir
-  
-  doLast {
-     new File(appdir, 'run.cmd').text = """
-  @echo off
-  setlocal
-  
-  ${versionText()}
-  
-  java %JAVA_OPTS% -cp \"%~dp0${String.join(';%~dp0', libdir.list())}\" ${mainClassName} %*
-  
-  """.stripIndent()
-  } 
-}
-
-def versionText() {
-  if(!version && version == 'unspecified') return '';
-  String s = "echo version: %APP_VERSION% (${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM))}^)"
-  return """
-  SET APP_VERSION=${version}
-  if [%1]==[-v] (
-    ${s}
-    goto:eof
-  )
-  if [%1]==[--version] (
-    ${s}
-    goto:eof
-  )
-  """;    
-}
-
-
-
-
-defaultTasks 'install'
 
 run {
    environment['JSON_TOSTRING']=true
    environment['DEFAULT_LOGGING_FILE']=true
-   
 }

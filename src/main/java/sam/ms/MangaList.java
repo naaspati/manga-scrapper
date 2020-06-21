@@ -1,66 +1,71 @@
 package sam.ms;
 
-import java.io.IOException;
-import java.nio.file.Paths;
-import java.sql.SQLException;
+import static sam.api.config.InjectorKeys.DRY_RUN;
+
+import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-import sam.downloader.db.DownloaderDB;
+import javax.inject.Inject;
+import javax.inject.Named;
+import javax.inject.Provider;
+import javax.inject.Singleton;
+
+import com.carrotsearch.hppc.IntObjectScatterMap;
+
+import sam.api.ShutdownHooks;
+import sam.api.store.Store;
+import sam.api.store.StoreException;
 import sam.ms.entities.Manga;
-import sam.ms.extras.Utils;
-
+@Singleton
 public class MangaList implements Iterable<Manga> {
-
-	private static volatile MangaList INSTANCE;
-	public static MangaList createInstance() throws SQLException {
-		if(INSTANCE == null)
-			INSTANCE = new MangaList();
-		return INSTANCE;
-	}
-	public static MangaList getInstance() {
-		return INSTANCE;
-	}
 	private final List<Manga> mangas;
-	private final Map<Integer, Manga> mangasMap = new HashMap<>();
+	private final IntObjectScatterMap<Manga> mangasMap = new IntObjectScatterMap<>();
 
-	private MangaList() throws SQLException {
-		if(Utils.dryRun()) {
-			mangas = new ArrayList<>();	
-		} else {
-			DownloaderDB db = new DownloaderDB(Paths.get("download.db"));
-			mangas = db.read(new DownloaderFactory());
-			mangas.forEach(m -> mangasMap.put(m.getMangaId(), m));
-			
-			Utils.addShutdownHook(() -> {
+	@Inject
+	@SuppressWarnings("unchecked")
+	MangaList(Provider<ShutdownHooks> shutdownHooks, Store storeFactory, @Named(DRY_RUN) boolean dryRun, PrintStream out) throws StoreException {
+		mangas = new ArrayList<>((List<Manga>) storeFactory.read());
+		mangas.forEach(m -> {
+			mangasMap.put(m.getMangaId(), m);
+			m.init();
+		});
+		
+		if(!dryRun) {
+			shutdownHooks.get().addShutdownHook(() -> {
 				try {
-					db.save(mangas);
-					System.out.println("saved: download.db");
-				} catch (SQLException | IOException e) {
-					e.printStackTrace();
+					storeFactory.save(mangas);
+				} catch (StoreException e) {
+					e.printStackTrace(out);
 				}
-			});
+			});			
 		}
 	}
-	public Manga get(Integer manga_id) {
-		return mangasMap.get(Objects.requireNonNull(manga_id));
+	
+	public Manga get(int manga_id) {
+		return mangasMap.get(manga_id);
 	}
-	public void add(Manga m) {
+	
+	public Manga add(Manga m) {
 		Objects.requireNonNull(m);
-		if(!mangasMap.containsKey(m.getMangaId())) {
+		Manga old = mangasMap.get(m.getMangaId()); 
+		if(old == null) {
 			mangasMap.put(m.getMangaId(), m);
 			mangas.add(m);
+			return m;
+		} else {
+			return old; 
 		}
 	}
+	
 	@Override
 	public void forEach(Consumer<? super Manga> action) {
 		mangas.forEach(action);
 	}
+	
 	@Override
 	public Iterator<Manga> iterator() {
 		return mangas.iterator();

@@ -1,80 +1,102 @@
 package sam.ms.entities;
-import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
-import sam.downloader.db.entities.impl.DChapterImpl;
-import sam.downloader.db.entities.meta.DStatus;
-import sam.downloader.db.entities.meta.IDPage;
-import sam.manga.samrock.Renamer;
-import sam.manga.scrapper.FailedChapter;
-import sam.manga.scrapper.ScrappedChapter;
-import sam.manga.scrapper.ScrappedPage;
-import sam.manga.scrapper.ScrapperException;
+import sam.api.store.entities.meta.MutableList;
+import sam.api.store.entities.meta.SChapter;
+import sam.api.store.entities.meta.SManga;
+import sam.api.store.entities.meta.SPage;
+import sam.collection.Iterators;
+import sam.manga.api.scrapper.ScrappedChapter;
 
-public class Chapter extends DChapterImpl {
-	private final Path path;
-	public ScrappedChapter sc;
-
-	{
-		this.path = getManga().getPath().resolve(Renamer.makeChapterFileName(getNumber(), getTitle(), manga.getMangaName()));
-	}
-	public Chapter(ScrappedChapter sc, Manga manga) {
-		super(manga, sc instanceof FailedChapter ? -1 : sc.getNumber(), sc.getTitle(), sc.getUrl());
-		this.volume = sc.getVolume();
-		this.sc = sc;
-	}
-	public Chapter(Manga manga, double number, String title, String volume, String source, String target, String url, String error, DStatus status) {
-		super(manga, number, title, volume, source, target, url, error, status);
+public class Chapter extends StatusContainer implements SChapter {
+	protected final int id;
+	protected final double number;
+	protected final String title;
+	protected final String url;
+	
+	protected Path source;
+	protected Path target;
+	protected String volume;
+	
+	protected final List<Page> pages;
+	protected transient Manga manga;
+	
+	public Chapter(Manga manga, int id, double number, String title, Path source, Path target, String url, String volume, List<Page> pages) {
+		this.manga = Objects.requireNonNull(manga);
+		this.id = id;
+		this.number = number;
+		this.title = title;
+		this.source = source;
+		this.target = target;
+		this.url = url;
+		this.volume = volume;
+		this.pages = pages == null ? new ArrayList<>() : pages;
 	}
 	
-	public void setScrappedChapter(ScrappedChapter sc) {
-		this.sc = sc;
+	public Chapter(Manga manga, ScrappedChapter sc, int id) {
+		this.manga = Objects.requireNonNull(manga);
+		this.id = id;
+		this.number = sc.getNumber();
+		this.title = sc.getTitle();
+		this.url = sc.getUrl();
+		this.pages = new ArrayList<>();
 	}
-	public int getHashId() { return getUrl().hashCode(); }
 
-	@Override public Path getSource() {
-		if(source == null) return null;
-		if(source instanceof Path) return (Path)source;
-		Path p = Paths.get(source.toString());
-		source = p;
-		return p;
+	@Override
+    public int getId() { return id; }
+
+	public Path getSource() {
+		return source;
 	}
-	@Override public Path getTarget() { 
-		if(target == null) return null;
-		if(target instanceof Path) return (Path)target;
-		Path p = Paths.get(target.toString());
-		target = p;
-		return p;
+	public Path getTarget() { 
+		return target;
 	}
 	public void setSourceTarget(Path chapterFolder) {
 		this.source = chapterFolder;
 		this.target = chapterFolder;
 	}
-	@Override
-	public Manga getManga() {
-		return (Manga)super.getManga();
+	
+	public SManga getManga() { return manga; }
+	@Override public String getVolume() { return volume; }
+	@Override public double getNumber(){ return this.number; }
+	@Override public String getTitle(){ return this.title; }
+	@Override public String getUrl(){ return this.url; }
+	@Override public String getError(){ return this.error; }
+	public MutableList<Page> getPages() {
+		return new MutableList<Page>(pages) {
+			@Override  
+			protected Object keyOf(Page item) {
+				return item == null ? null : item.getPageUrl();
+			}
+		};
 	}
-	public Path getPath() {
-		return path;
-	}
+	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@Override
-	public List<IDPage> getPages() {
-		return pages;
+	public Iterator<SPage> iterator() {
+		Iterator itr = pages == null ? Iterators.empty() : pages.iterator(); 
+		return itr;
+	}
+	
+	@Override
+	public int size() {
+		return pages == null ? 0 : pages.size();
+	}
+	private String filename;
+
+	@Override
+	public String getFileName() {
+		return filename;	
 	}
 
-	public void scrapPages() throws ScrapperException, IOException {
-		for (ScrappedPage sp : sc.getPages()) {
-			IDPage p = findPage(sp.getPageUrl());
-			if(p == null)
-				addPage(p = new Page(this, sp.getOrder(), sp.getPageUrl()));
-
-			if(sp.getImgUrl() != null)
-				((Page)p).setImgUrl(sp.getImgUrl());
-		}
-	}
-	public String[] getImageUrls(String pageUrl) throws ScrapperException, IOException {
-		return		sc.getPageImageUrl(pageUrl);
+	public void init(Manga manga) {
+		if(this.manga != null)
+			throw new IllegalStateException("already initialized");
+		
+		this.manga = Objects.requireNonNull(manga);
+		this.pages.forEach(p -> p.init(this));
 	}
 }
